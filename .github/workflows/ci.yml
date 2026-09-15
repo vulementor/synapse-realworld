@@ -35,6 +35,8 @@ jobs:
           synapse-realworld calibrate \
             --units-csv examples/data/laa_unit_versions_sample.csv \
             --offers-csv examples/data/laa_offers_sample.csv \
+            --travel-times-csv examples/data/laa_travel_times_sample.csv \
+            --project-anchor-id LAA \
             --db "$DB" \
             --registry-dir "$REGISTRY" \
             --code-commit-sha "$GITHUB_SHA" \
