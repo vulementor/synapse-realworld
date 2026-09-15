@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -12,7 +11,7 @@ from synapse_realworld.behaviour.diagnostics import (
 )
 from synapse_realworld.data.choice_set import TemporalChoiceSetBuilder
 from synapse_realworld.data.dataset import DecisionDatasetBuilder
-from synapse_realworld.data.decision_assembler import HistoricalDecisionAssembler
+from synapse_realworld.data.decision_assembler import CommuteProvider, HistoricalDecisionAssembler
 from synapse_realworld.data.projection import project_feature_observations
 from synapse_realworld.data.training import build_calibration_examples, temporal_holdout
 from synapse_realworld.domain.events import CanonicalEvent
@@ -40,6 +39,7 @@ def calibrate_historical_choices(
     model_version: str,
     code_commit_sha: str,
     dataset_snapshot_id: str,
+    commute_provider: CommuteProvider | None = None,
     feature_schema_version: str = "decision-features-v0.3",
     holdout_fraction: float = 0.2,
     bootstrap_samples: int = 100,
@@ -50,7 +50,10 @@ def calibrate_historical_choices(
         unit_versions=tuple(unit_versions),
         offers=tuple(offers),
     )
-    decisions = HistoricalDecisionAssembler(choice_builder).assemble(materialized_events)
+    decisions = HistoricalDecisionAssembler(
+        choice_builder,
+        commute_provider=commute_provider,
+    ).assemble(materialized_events)
     observations = project_feature_observations(materialized_events)
     rows = DecisionDatasetBuilder().build(events=decisions, observations=observations)
     timed_examples = build_calibration_examples(rows)
