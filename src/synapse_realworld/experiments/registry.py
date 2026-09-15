@@ -85,8 +85,11 @@ class FileExperimentRegistry:
         definition = self.get_definition(observation.experiment_id)
         if definition is None:
             raise ValueError("cannot observe an unknown experiment")
-        if self.get_prediction(observation.experiment_id) is None:
+        prediction = self.get_prediction(observation.experiment_id)
+        if prediction is None:
             raise ValueError("a locked prediction is required before observations")
+        if observation.observed_at < prediction.created_at:
+            raise ValueError("observation timestamp predates the locked prediction")
         if observation.metric_name != definition.metric_name:
             raise ValueError("observation metric_name must match experiment metric_name")
         if observation.variant not in {
