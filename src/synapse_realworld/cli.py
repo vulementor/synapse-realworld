@@ -179,8 +179,8 @@ def ingest_inventory(
 @app.command("ingest-jsonl")
 def ingest_jsonl(
     jsonl_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
-    db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
     source_id: Annotated[str, typer.Option(help="Source ID expected on every event")],
+    db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
 ) -> None:
     """Ingest canonical events emitted by an external connector or agent harness."""
     content = jsonl_path.read_bytes()
