@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable
+from typing import Any
+from uuid import UUID
 
 from synapse_realworld.behaviour.calibration import CalibrationExample
 from synapse_realworld.data.dataset import DecisionRow
@@ -50,8 +52,10 @@ def _parse_float(value: object) -> float | None:
         return None
 
 
-def household_from_decision_row(row: DecisionRow) -> Household:
-    features = row.features
+def household_from_features(
+    household_id: UUID,
+    features: Mapping[str, Any],
+) -> Household:
     purpose_raw = str(features.get("purchase_purpose", "unknown"))
     product_raw = features.get("preferred_product_type")
     try:
@@ -88,7 +92,7 @@ def household_from_decision_row(row: DecisionRow) -> Household:
         children_band = "unknown"
 
     return Household(
-        household_id=row.choice_event.household_id,
+        household_id=household_id,
         purchase_purpose=purpose,
         household_size_band=household_size,
         children_band=children_band,
@@ -107,6 +111,10 @@ def household_from_decision_row(row: DecisionRow) -> Household:
         preferred_product_type=preferred_product,
         profile_confidence=profile_confidence,
     )
+
+
+def household_from_decision_row(row: DecisionRow) -> Household:
+    return household_from_features(row.choice_event.household_id, row.features)
 
 
 @dataclass(frozen=True, slots=True)
