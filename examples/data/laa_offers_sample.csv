@@ -1,0 +1,3 @@
+unit_id,product_type,list_price,net_price,discount_pct,incentive_cash,payment_plan_code,down_payment_pct,monthly_payment_est,effective_from,effective_to,source_id
+22222222-2222-2222-2222-222222222222,townhouse,2000000000,1950000000,0,0,PLAN-A,0.3,18000000,2026-09-01T00:00:00+07:00,,offer:sample
+33333333-3333-3333-3333-333333333333,townhouse,2500000000,2450000000,0,0,PLAN-A,0.3,22000000,2026-09-01T00:00:00+07:00,,offer:sample
