@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable
 
 from synapse_realworld.domain.enums import InventoryState
 from synapse_realworld.domain.models import ChoiceAlternative
