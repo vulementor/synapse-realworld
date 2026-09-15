@@ -20,9 +20,10 @@ jobs:
         run: pytest
       - name: Demo simulation smoke test
         run: synapse-realworld demo --population 50 --seed 42 > /tmp/synapse-demo.json
-      - name: Real-data pipeline smoke test
+      - name: Real-data and model-governance smoke test
         run: |
           DB=/tmp/synapse-realworld-ci.duckdb
+          REGISTRY=/tmp/synapse-model-registry
           synapse-realworld init-store --db "$DB"
           synapse-realworld ingest-sales examples/data/laa_sales_capture_sample.csv --db "$DB"
           synapse-realworld ingest-outcomes examples/data/laa_outcomes_sample.csv --db "$DB"
@@ -35,6 +36,22 @@ jobs:
             --units-csv examples/data/laa_unit_versions_sample.csv \
             --offers-csv examples/data/laa_offers_sample.csv \
             --db "$DB" \
+            --registry-dir "$REGISTRY" \
+            --code-commit-sha "$GITHUB_SHA" \
             --holdout-fraction 0.5 \
+            --bootstrap-samples 5 \
             --output /tmp/calibration.json
           test -s /tmp/calibration.json
+          ARTIFACT_ID=$(python -c 'import json; print(json.load(open("/tmp/calibration.json"))["artifact"]["artifact_id"])')
+          synapse-realworld model-decide "$ARTIFACT_ID" \
+            --status validated \
+            --decided-by ci-data-review \
+            --reason "CI holdout validation" \
+            --registry-dir "$REGISTRY" > /tmp/model-validated.json
+          synapse-realworld model-decide "$ARTIFACT_ID" \
+            --status approved \
+            --decided-by ci-business-review \
+            --reason "CI approval lifecycle test" \
+            --registry-dir "$REGISTRY" > /tmp/model-approved.json
+          synapse-realworld models --registry-dir "$REGISTRY" > /tmp/models.json
+          python -c 'import json; data=json.load(open("/tmp/models.json")); assert data[0]["status"] == "approved"'
