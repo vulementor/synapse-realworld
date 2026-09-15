@@ -8,7 +8,7 @@ from datetime import datetime
 from synapse_realworld.behaviour import BaselineUtilityModel
 from synapse_realworld.data import validate_choice_set
 from synapse_realworld.domain.models import ChoiceAlternative, Household, Offer
-from synapse_realworld.population import SyntheticPopulationGenerator
+from synapse_realworld.population import PopulationGenerator, SyntheticPopulationGenerator
 from synapse_realworld.simulation.models import Scenario, SimulationMetadata, SimulationResult
 
 
@@ -20,7 +20,7 @@ class RealWorldSimulator:
         self,
         *,
         choice_set_factory: ChoiceSetFactory,
-        population_generator: SyntheticPopulationGenerator | None = None,
+        population_generator: PopulationGenerator | None = None,
         behaviour_model: BaselineUtilityModel | None = None,
         as_of: datetime,
         input_snapshot_id: str,
