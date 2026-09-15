@@ -20,13 +20,16 @@ jobs:
         run: pytest
       - name: Demo simulation smoke test
         run: synapse-realworld demo --population 50 --seed 42 > /tmp/synapse-demo.json
-      - name: Synthetic-market end-to-end smoke test
+      - name: Closed-loop experiment end-to-end smoke test
         run: |
           DB=/tmp/synapse-realworld-ci.duckdb
-          REGISTRY=/tmp/synapse-model-registry
+          MODEL_REGISTRY=/tmp/synapse-model-registry
+          EXPERIMENT_REGISTRY=/tmp/synapse-experiment-registry
           POPULATION=/tmp/population-profile.json
           CALIBRATION=/tmp/calibration.json
           UNCERTAINTY=/tmp/uncertainty.json
+          EXP_PREDICTION=/tmp/experiment-prediction.json
+          EXP_EVALUATION=/tmp/experiment-evaluation.json
 
           synapse-realworld init-store --db "$DB"
           synapse-realworld ingest-sales examples/data/laa_sales_capture_sample.csv --db "$DB"
@@ -39,7 +42,7 @@ jobs:
 
           synapse-realworld fit-population \
             --db "$DB" \
-            --profile-name laa-ci-v0.4 \
+            --profile-name laa-ci-v0.5 \
             --diagnostic-population-size 500 \
             --output "$POPULATION" > /tmp/population-console.json
           test -s "$POPULATION"
@@ -50,8 +53,8 @@ jobs:
             --travel-times-csv examples/data/laa_travel_times_sample.csv \
             --project-anchor-id LAA \
             --db "$DB" \
-            --registry-dir "$REGISTRY" \
-            --model-version v0.4-ci \
+            --registry-dir "$MODEL_REGISTRY" \
+            --model-version v0.5-ci \
             --code-commit-sha "$GITHUB_SHA" \
             --holdout-fraction 0.5 \
             --bootstrap-samples 5 \
@@ -63,12 +66,12 @@ jobs:
             --status validated \
             --decided-by ci-data-review \
             --reason "CI holdout validation" \
-            --registry-dir "$REGISTRY" > /tmp/model-validated.json
+            --registry-dir "$MODEL_REGISTRY" > /tmp/model-validated.json
           synapse-realworld model-decide "$ARTIFACT_ID" \
             --status approved \
             --decided-by ci-business-review \
             --reason "CI approval lifecycle test" \
-            --registry-dir "$REGISTRY" > /tmp/model-approved.json
+            --registry-dir "$MODEL_REGISTRY" > /tmp/model-approved.json
 
           synapse-realworld simulate-uncertainty "$ARTIFACT_ID" \
             --population-profile "$POPULATION" \
@@ -77,21 +80,76 @@ jobs:
             --as-of 2026-09-15T08:00:00+07:00 \
             --travel-times-csv examples/data/laa_travel_times_sample.csv \
             --project-anchor-id LAA \
-            --registry-dir "$REGISTRY" \
+            --registry-dir "$MODEL_REGISTRY" \
             --scenario-id ci-price-plus-5 \
             --price-change 0.05 \
             --population-size 100 \
             --output "$UNCERTAINTY" > /tmp/uncertainty-console.json
           test -s "$UNCERTAINTY"
 
-          synapse-realworld models --registry-dir "$REGISTRY" > /tmp/models.json
+          synapse-realworld experiment-create \
+            --name "CI LAA offer experiment" \
+            --hypothesis "A lower treatment price increases LAA choice rate" \
+            --created-by ci \
+            --minimum-trials-per-variant 50 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiment-create.json
+          EXPERIMENT_ID=$(python -c 'import json; print(json.load(open("/tmp/experiment-create.json"))["definition"]["experiment_id"])')
+
+          synapse-realworld experiment-predict "$EXPERIMENT_ID" "$ARTIFACT_ID" \
+            --population-profile "$POPULATION" \
+            --units-csv examples/data/laa_unit_versions_sample.csv \
+            --offers-csv examples/data/laa_offers_sample.csv \
+            --as-of 2026-09-15T08:00:00+07:00 \
+            --travel-times-csv examples/data/laa_travel_times_sample.csv \
+            --project-anchor-id LAA \
+            --experiment-registry-dir "$EXPERIMENT_REGISTRY" \
+            --model-registry-dir "$MODEL_REGISTRY" \
+            --control-price-change 0.0 \
+            --treatment-price-change -0.05 \
+            --population-size 100 \
+            --output "$EXP_PREDICTION" > /tmp/experiment-predict-console.json
+          test -s "$EXP_PREDICTION"
+
+          synapse-realworld experiment-observe "$EXPERIMENT_ID" \
+            --variant control \
+            --successes 20 \
+            --trials 100 \
+            --source-id ci-results \
+            --source-event-key control-batch-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/control-observation.json
+          synapse-realworld experiment-observe "$EXPERIMENT_ID" \
+            --variant treatment \
+            --successes 28 \
+            --trials 100 \
+            --source-id ci-results \
+            --source-event-key treatment-batch-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/treatment-observation.json
+
+          synapse-realworld experiment-evaluate "$EXPERIMENT_ID" \
+            --registry-dir "$EXPERIMENT_REGISTRY" \
+            --output "$EXP_EVALUATION" > /tmp/experiment-evaluate-console.json
+          synapse-realworld experiment-scorecard "$ARTIFACT_ID" \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiment-scorecard.json
+          synapse-realworld experiments \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiments.json
+
+          synapse-realworld models --registry-dir "$MODEL_REGISTRY" > /tmp/models.json
           python - <<'PY'
           import json
           models = json.load(open("/tmp/models.json"))
-          result = json.load(open("/tmp/uncertainty.json"))
-          u = result["uncertainty"]
+          uncertainty = json.load(open("/tmp/uncertainty.json"))["uncertainty"]
+          evaluation = json.load(open("/tmp/experiment-evaluation.json"))
+          scorecard = json.load(open("/tmp/experiment-scorecard.json"))["scorecard"]
+          experiments = json.load(open("/tmp/experiments.json"))
           assert models[0]["status"] == "approved"
-          assert u["model_status"] == "approved"
-          assert u["laa_share"]["p05"] <= u["laa_share"]["p50"] <= u["laa_share"]["p95"]
-          assert u["population_version"].startswith("empirical:laa-ci-v0.4:")
+          assert uncertainty["model_status"] == "approved"
+          assert uncertainty["laa_share"]["p05"] <= uncertainty["laa_share"]["p50"] <= uncertainty["laa_share"]["p95"]
+          assert uncertainty["population_version"].startswith("empirical:laa-ci-v0.5:")
+          assert evaluation["causal_interpretation_allowed"] is True
+          assert evaluation["minimum_sample_reached"] is True
+          assert abs(evaluation["observed_effect"] - 0.08) < 1e-12
+          assert scorecard["evaluated_experiments"] == 1
+          assert scorecard["causal_experiments"] == 1
+          assert experiments[0]["prediction_locked"] is True
+          assert experiments[0]["observations"] == 2
           PY
