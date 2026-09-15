@@ -36,6 +36,7 @@ class CalibrationDiagnostics(DiagnosticsModel):
     coefficient_intervals: dict[str, CoefficientInterval]
     segment_metrics: dict[str, CalibrationMetrics]
     baseline: BaselineComparison
+    bootstrap_parameter_samples: tuple[dict[str, float], ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -96,6 +97,7 @@ def build_calibration_diagnostics(
 
     rng = random.Random(seed)
     bootstrap_weights: dict[str, list[float]] = {name: [] for name in FEATURE_NAMES}
+    parameter_samples: list[dict[str, float]] = []
     bootstrap_calibrator = MultinomialLogitCalibrator(
         learning_rate=model.learning_rate,
         max_epochs=min(model.max_epochs, 500),
@@ -105,8 +107,10 @@ def build_calibration_diagnostics(
     for _ in range(bootstrap_samples):
         sample = tuple(rng.choice(fit_data) for _ in range(len(fit_data)))
         fitted = bootstrap_calibrator.fit(sample)
+        fitted_weights = {name: float(fitted.weights[name]) for name in FEATURE_NAMES}
+        parameter_samples.append(fitted_weights)
         for name in FEATURE_NAMES:
-            bootstrap_weights[name].append(fitted.weights[name])
+            bootstrap_weights[name].append(fitted_weights[name])
 
     intervals = {
         name: CoefficientInterval(
@@ -138,5 +142,6 @@ def build_calibration_diagnostics(
             uniform_log_loss=uniform_loss,
             improvement_pct=improvement,
         ),
+        bootstrap_parameter_samples=tuple(parameter_samples),
         warnings=tuple(warnings),
     )

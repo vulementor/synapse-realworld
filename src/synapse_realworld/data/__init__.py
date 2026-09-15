@@ -8,6 +8,7 @@ from synapse_realworld.data.training import (
     TimedCalibrationExample,
     build_calibration_examples,
     household_from_decision_row,
+    household_from_features,
     temporal_holdout,
 )
 
@@ -18,6 +19,7 @@ __all__ = [
     "TimedCalibrationExample",
     "build_calibration_examples",
     "household_from_decision_row",
+    "household_from_features",
     "project_feature_observations",
     "project_reason_observations",
     "temporal_holdout",
