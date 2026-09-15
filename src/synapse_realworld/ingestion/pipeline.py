@@ -10,7 +10,11 @@ from synapse_realworld.persistence.ports import EventStore, SnapshotStore
 
 
 class EventIngestor:
-    def __init__(self, event_store: EventStore, snapshot_store: SnapshotStore | None = None) -> None:
+    def __init__(
+        self,
+        event_store: EventStore,
+        snapshot_store: SnapshotStore | None = None,
+    ) -> None:
         self.event_store = event_store
         self.snapshot_store = snapshot_store
 
