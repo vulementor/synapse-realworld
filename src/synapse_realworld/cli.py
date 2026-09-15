@@ -15,6 +15,7 @@ from synapse_realworld.adapters import (
     load_offers_csv,
     load_outcomes_csv,
     load_sales_capture_csv,
+    load_travel_times_csv,
     load_unit_versions_csv,
     offer_to_event,
     unit_version_to_event,
@@ -30,6 +31,7 @@ from synapse_realworld.registry import (
     ModelStatus,
 )
 from synapse_realworld.simulation import Scenario
+from synapse_realworld.spatial import build_project_commute_provider
 
 app = typer.Typer(
     name="synapse-realworld",
@@ -43,10 +45,13 @@ def _combined_dataset_snapshot_id(
     units_csv: Path,
     offers_csv: Path,
     source_hashes: list[str],
+    extra_files: tuple[Path, ...] = (),
 ) -> str:
     digest = hashlib.sha256()
     digest.update(hashlib.sha256(units_csv.read_bytes()).digest())
     digest.update(hashlib.sha256(offers_csv.read_bytes()).digest())
+    for path in extra_files:
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
     for source_hash in sorted(source_hashes):
         digest.update(source_hash.encode("utf-8"))
     return f"sha256:{digest.hexdigest()}"
@@ -221,6 +226,13 @@ def calibrate(
     units_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
     offers_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
     db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
+    travel_times_csv: Annotated[
+        Path | None,
+        typer.Option(exists=True, readable=True, help="Optional temporal travel-time evidence"),
+    ] = None,
+    project_anchor_id: Annotated[
+        str, typer.Option(help="Destination anchor shared by project units")
+    ] = "LAA",
     registry_dir: Annotated[
         Path, typer.Option(help="Append-only model registry directory")
     ] = Path("model_registry"),
@@ -245,10 +257,23 @@ def calibrate(
         events = tuple(store.list_events())
         snapshots = tuple(store.list_snapshots())
 
+    commute_provider = None
+    extra_files: tuple[Path, ...] = ()
+    if travel_times_csv is not None:
+        travel_times = load_travel_times_csv(travel_times_csv)
+        commute_provider = build_project_commute_provider(
+            events=events,
+            unit_versions=unit_versions,
+            travel_times=travel_times,
+            destination_anchor_id=project_anchor_id,
+        )
+        extra_files = (travel_times_csv,)
+
     dataset_snapshot_id = _combined_dataset_snapshot_id(
         units_csv=units_csv,
         offers_csv=offers_csv,
         source_hashes=[snapshot.content_hash for snapshot in snapshots],
+        extra_files=extra_files,
     )
     result = calibrate_historical_choices(
         unit_versions=unit_versions,
@@ -258,6 +283,7 @@ def calibrate(
         model_version=model_version,
         code_commit_sha=code_commit_sha,
         dataset_snapshot_id=dataset_snapshot_id,
+        commute_provider=commute_provider,
         holdout_fraction=holdout_fraction,
         bootstrap_samples=bootstrap_samples,
         seed=seed,
