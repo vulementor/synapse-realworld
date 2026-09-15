@@ -52,8 +52,8 @@ class ModelArtifact(RegistryModel):
             if not getattr(self, field_name).strip():
                 raise ValueError(f"{field_name} is required")
         if self.training_window_start and self.training_window_end:
-            if self.training_window_start >= self.training_window_end:
-                raise ValueError("training_window_start must be before training_window_end")
+            if self.training_window_start > self.training_window_end:
+                raise ValueError("training_window_start must not be after training_window_end")
         return self
 
     @property
