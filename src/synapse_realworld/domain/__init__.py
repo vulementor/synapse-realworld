@@ -8,6 +8,7 @@ from synapse_realworld.domain.enums import (
     ReasonCode,
     ReasonDirection,
 )
+from synapse_realworld.domain.events import CanonicalEvent, SourceSnapshot
 from synapse_realworld.domain.models import (
     ChoiceAlternative,
     Household,
@@ -18,6 +19,7 @@ from synapse_realworld.domain.models import (
 )
 
 __all__ = [
+    "CanonicalEvent",
     "ChoiceAlternative",
     "ChoiceOutcome",
     "DecisionStage",
@@ -31,5 +33,6 @@ __all__ = [
     "ReasonCode",
     "ReasonDirection",
     "ReasonObservation",
+    "SourceSnapshot",
     "Unit",
 ]

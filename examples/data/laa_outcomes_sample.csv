@@ -1,0 +1,3 @@
+occurred_at,household_id,outcome_type,unit_code,outside_option,stage,verified,source_record_id
+2026-09-10T10:00:00+07:00,hh-source-1,booking,LK4-42,,booking,true,sap-booking-001
+2026-09-12T10:00:00+07:00,hh-source-2,selected_competitor,,competitor_project,final,true,crm-lost-002
