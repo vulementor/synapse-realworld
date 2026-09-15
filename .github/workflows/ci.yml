@@ -20,7 +20,7 @@ jobs:
         run: pytest
       - name: Demo simulation smoke test
         run: synapse-realworld demo --population 50 --seed 42 > /tmp/synapse-demo.json
-      - name: Closed-loop experiment end-to-end smoke test
+      - name: Model-operations closed-loop smoke test
         run: |
           DB=/tmp/synapse-realworld-ci.duckdb
           MODEL_REGISTRY=/tmp/synapse-model-registry
@@ -42,7 +42,7 @@ jobs:
 
           synapse-realworld fit-population \
             --db "$DB" \
-            --profile-name laa-ci-v0.5 \
+            --profile-name laa-ci-v0.6 \
             --diagnostic-population-size 500 \
             --output "$POPULATION" > /tmp/population-console.json
           test -s "$POPULATION"
@@ -54,7 +54,7 @@ jobs:
             --project-anchor-id LAA \
             --db "$DB" \
             --registry-dir "$MODEL_REGISTRY" \
-            --model-version v0.5-ci \
+            --model-version v0.6-ci \
             --code-commit-sha "$GITHUB_SHA" \
             --holdout-fraction 0.5 \
             --bootstrap-samples 5 \
@@ -130,6 +130,10 @@ jobs:
             --output "$EXP_EVALUATION" > /tmp/experiment-evaluate-console.json
           synapse-realworld experiment-scorecard "$ARTIFACT_ID" \
             --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiment-scorecard.json
+          synapse-realworld experiment-qa "$EXPERIMENT_ID" \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiment-qa.json
+          synapse-realworld model-recalibration-assess "$ARTIFACT_ID" \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/recalibration-assessment.json
           synapse-realworld experiments \
             --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/experiments.json
 
@@ -140,16 +144,24 @@ jobs:
           uncertainty = json.load(open("/tmp/uncertainty.json"))["uncertainty"]
           evaluation = json.load(open("/tmp/experiment-evaluation.json"))
           scorecard = json.load(open("/tmp/experiment-scorecard.json"))["scorecard"]
+          qa = json.load(open("/tmp/experiment-qa.json"))
+          recalibration = json.load(open("/tmp/recalibration-assessment.json"))["assessment"]
           experiments = json.load(open("/tmp/experiments.json"))
           assert models[0]["status"] == "approved"
           assert uncertainty["model_status"] == "approved"
           assert uncertainty["laa_share"]["p05"] <= uncertainty["laa_share"]["p50"] <= uncertainty["laa_share"]["p95"]
-          assert uncertainty["population_version"].startswith("empirical:laa-ci-v0.5:")
+          assert uncertainty["population_version"].startswith("empirical:laa-ci-v0.6:")
           assert evaluation["causal_interpretation_allowed"] is True
           assert evaluation["minimum_sample_reached"] is True
           assert abs(evaluation["observed_effect"] - 0.08) < 1e-12
           assert scorecard["evaluated_experiments"] == 1
           assert scorecard["causal_experiments"] == 1
+          assert qa["sample_ratio_mismatch"] is False
+          assert qa["causal_design_declared"] is True
+          assert qa["minimum_sample_reached"] is True
+          assert recalibration["state"] == "insufficient_evidence"
+          assert recalibration["human_review_required"] is True
+          assert recalibration["automatic_retraining_allowed"] is False
           assert experiments[0]["prediction_locked"] is True
           assert experiments[0]["observations"] == 2
           PY
