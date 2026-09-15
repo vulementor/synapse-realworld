@@ -11,6 +11,22 @@ from synapse_realworld.registry.models import (
     RegisteredModel,
 )
 
+ALLOWED_TRANSITIONS: dict[ModelStatus, set[ModelStatus]] = {
+    ModelStatus.CANDIDATE: {
+        ModelStatus.VALIDATED,
+        ModelStatus.REJECTED,
+        ModelStatus.ARCHIVED,
+    },
+    ModelStatus.VALIDATED: {
+        ModelStatus.APPROVED,
+        ModelStatus.REJECTED,
+        ModelStatus.ARCHIVED,
+    },
+    ModelStatus.APPROVED: {ModelStatus.ARCHIVED},
+    ModelStatus.REJECTED: {ModelStatus.ARCHIVED},
+    ModelStatus.ARCHIVED: set(),
+}
+
 
 class FileModelRegistry:
     """Small append-only registry suitable for local runs and CI.
@@ -47,10 +63,17 @@ class FileModelRegistry:
         return True
 
     def decide(self, decision: ModelDecision) -> None:
-        if not self._artifact_path(decision.artifact_id).exists():
+        registered = self.get(decision.artifact_id)
+        if registered is None:
             raise ValueError("cannot decide on an unregistered model artifact")
         if decision.status == ModelStatus.CANDIDATE:
             raise ValueError("candidate is the implicit initial status, not a governance decision")
+        allowed = ALLOWED_TRANSITIONS[registered.status]
+        if decision.status not in allowed:
+            raise ValueError(
+                f"invalid model status transition: {registered.status.value} -> "
+                f"{decision.status.value}"
+            )
         path = self._decision_path(decision.artifact_id)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(decision.model_dump(mode="json"), ensure_ascii=False))
