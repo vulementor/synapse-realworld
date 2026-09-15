@@ -48,10 +48,13 @@ def load_offers_csv(path: str | Path) -> tuple[Offer, ...]:
     offers: list[Offer] = []
     with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
+            product_type = (
+                ProductType(row["product_type"]) if row.get("product_type") else None
+            )
             offers.append(
                 Offer(
                     unit_id=UUID(row["unit_id"]) if row.get("unit_id") else None,
-                    product_type=ProductType(row["product_type"]) if row.get("product_type") else None,
+                    product_type=product_type,
                     list_price=float(row["list_price"]),
                     net_price=float(row["net_price"]) if row.get("net_price") else None,
                     discount_pct=float(row.get("discount_pct") or 0),
