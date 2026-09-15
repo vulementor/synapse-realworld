@@ -70,3 +70,40 @@ def test_empirical_population_removes_source_ids_and_preserves_joint_prototypes(
     assert diagnostics.synthetic_households == 2000
     assert diagnostics.max_total_variation_distance < 0.1
     assert any("very_small_population_sample" in warning for warning in diagnostics.warnings)
+
+
+def test_population_version_depends_on_features_not_source_ids_or_order() -> None:
+    first_source = (
+        _household(
+            "11111111-1111-1111-1111-111111111111",
+            PurchasePurpose.OWN_STAY,
+            "VSIP III",
+            1500,
+        ),
+        _household(
+            "22222222-2222-2222-2222-222222222222",
+            PurchasePurpose.INVESTMENT,
+            "Nam Tan Uyen",
+            2500,
+        ),
+    )
+    second_source = (
+        _household(
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            PurchasePurpose.INVESTMENT,
+            "Nam Tan Uyen",
+            2500,
+        ),
+        _household(
+            "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            PurchasePurpose.OWN_STAY,
+            "VSIP III",
+            1500,
+        ),
+    )
+
+    first = fit_empirical_population_profile(first_source, name="stable")
+    second = fit_empirical_population_profile(second_source, name="stable")
+
+    assert first.content_hash == second.content_hash
+    assert first.population_version == second.population_version
