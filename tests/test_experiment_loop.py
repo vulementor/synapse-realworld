@@ -9,10 +9,13 @@ from synapse_realworld.experiments import (
     ExperimentObservation,
     ExperimentPrediction,
     FileExperimentRegistry,
+    build_model_experiment_scorecard,
     evaluate_experiment,
 )
 
 MODEL_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+PREDICTED_AT = datetime(2026, 9, 19, 8, 0, tzinfo=timezone.utc)
+OBSERVED_AT = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
 
 
 def _prediction(experiment_id: UUID) -> ExperimentPrediction:
@@ -31,6 +34,7 @@ def _prediction(experiment_id: UUID) -> ExperimentPrediction:
         effect_p50=0.10,
         effect_p95=0.15,
         ensemble_samples=100,
+        created_at=PREDICTED_AT,
         source_snapshot_id="snapshot:test",
     )
 
@@ -42,6 +46,7 @@ def _observation(
     successes: int,
     trials: int,
     key: str,
+    observed_at: datetime = OBSERVED_AT,
 ) -> ExperimentObservation:
     return ExperimentObservation(
         experiment_id=experiment_id,
@@ -49,7 +54,7 @@ def _observation(
         metric_name="laa_choice_rate",
         successes=successes,
         trials=trials,
-        observed_at=datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc),
+        observed_at=observed_at,
         source_id="crm-test",
         source_event_key=key,
     )
@@ -85,14 +90,14 @@ def test_experiment_prediction_is_locked_before_observations(tmp_path) -> None:
     assert registry.append_observation(control) is False
     assert registry.append_observation(treatment) is True
 
-    with pytest.raises(ValueError, match="already locked"):
-        registry.lock_prediction(
-            prediction.model_copy(update={"effect_p50": 0.12})
-        )
+    with pytest.raises(ValueError, match="before the first observation"):
+        registry.lock_prediction(prediction.model_copy(update={"effect_p50": 0.12}))
 
+    stored_prediction = registry.get_prediction(definition.experiment_id)
+    assert stored_prediction is not None
     evaluation = evaluate_experiment(
         definition=definition,
-        prediction=registry.get_prediction(definition.experiment_id),
+        prediction=stored_prediction,
         observations=registry.list_observations(definition.experiment_id),
     )
     assert evaluation.control.rate == 0.20
@@ -102,6 +107,27 @@ def test_experiment_prediction_is_locked_before_observations(tmp_path) -> None:
     assert evaluation.prediction_direction_correct is True
     assert evaluation.causal_interpretation_allowed is True
     assert evaluation.minimum_sample_reached is True
+
+
+def test_registry_rejects_backdated_observation(tmp_path) -> None:
+    registry = FileExperimentRegistry(tmp_path / "experiments")
+    definition = ExperimentDefinition(
+        name="Prospective test",
+        hypothesis="Treatment raises the choice rate",
+        created_by="test",
+    )
+    registry.create(definition)
+    registry.lock_prediction(_prediction(definition.experiment_id))
+    backdated = _observation(
+        definition.experiment_id,
+        variant="control",
+        successes=5,
+        trials=20,
+        key="backdated",
+        observed_at=datetime(2026, 9, 18, 12, 0, tzinfo=timezone.utc),
+    )
+    with pytest.raises(ValueError, match="predates the locked prediction"):
+        registry.append_observation(backdated)
 
 
 def test_non_randomized_experiment_is_not_labeled_causal() -> None:
@@ -135,3 +161,55 @@ def test_non_randomized_experiment_is_not_labeled_causal() -> None:
     )
     assert evaluation.causal_interpretation_allowed is False
     assert any("non_randomized_assignment" in warning for warning in evaluation.warnings)
+
+
+def test_model_scorecard_aggregates_real_world_forecast_accuracy() -> None:
+    randomized = ExperimentDefinition(
+        name="Randomized offer test",
+        hypothesis="Treatment raises the choice rate",
+        created_by="test",
+    )
+    observational = ExperimentDefinition(
+        name="Observed comparison",
+        hypothesis="Treatment group has higher choice rate",
+        assignment_method=AssignmentMethod.OBSERVATIONAL,
+        created_by="test",
+    )
+    evaluations = []
+    for definition, treatment_successes in (
+        (randomized, 30),
+        (observational, 28),
+    ):
+        evaluations.append(
+            evaluate_experiment(
+                definition=definition,
+                prediction=_prediction(definition.experiment_id),
+                observations=(
+                    _observation(
+                        definition.experiment_id,
+                        variant="control",
+                        successes=20,
+                        trials=100,
+                        key=f"{definition.experiment_id}:control",
+                    ),
+                    _observation(
+                        definition.experiment_id,
+                        variant="treatment",
+                        successes=treatment_successes,
+                        trials=100,
+                        key=f"{definition.experiment_id}:treatment",
+                    ),
+                ),
+            )
+        )
+
+    scorecard = build_model_experiment_scorecard(
+        evaluations,
+        model_artifact_id=MODEL_ID,
+    )
+    assert scorecard.evaluated_experiments == 2
+    assert scorecard.causal_experiments == 1
+    assert scorecard.minimum_sample_experiments == 2
+    assert scorecard.direction_accuracy == 1.0
+    assert scorecard.mean_absolute_effect_error == pytest.approx(0.01)
+    assert any("small_experiment_history" in warning for warning in scorecard.warnings)
