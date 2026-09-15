@@ -63,19 +63,23 @@ def build_calibration_diagnostics(
     *,
     examples: Iterable[CalibrationExample],
     weights: dict[str, float],
+    bootstrap_examples: Iterable[CalibrationExample] | None = None,
     calibrator: MultinomialLogitCalibrator | None = None,
     bootstrap_samples: int = 100,
     seed: int = 42,
 ) -> CalibrationDiagnostics:
-    data = tuple(examples)
-    if not data:
-        raise ValueError("diagnostics require at least one example")
+    evaluation_data = tuple(examples)
+    if not evaluation_data:
+        raise ValueError("diagnostics require at least one evaluation example")
+    fit_data = tuple(bootstrap_examples) if bootstrap_examples is not None else evaluation_data
+    if not fit_data:
+        raise ValueError("bootstrap diagnostics require at least one fitting example")
     if bootstrap_samples <= 0:
         raise ValueError("bootstrap_samples must be positive")
 
     model = calibrator or MultinomialLogitCalibrator()
-    model_metrics = model.evaluate(data, weights=weights)
-    uniform_loss = uniform_baseline_log_loss(data)
+    model_metrics = model.evaluate(evaluation_data, weights=weights)
+    uniform_loss = uniform_baseline_log_loss(evaluation_data)
     improvement = (
         (uniform_loss - model_metrics.log_loss) / uniform_loss * 100
         if uniform_loss > 0
@@ -83,7 +87,7 @@ def build_calibration_diagnostics(
     )
 
     grouped: dict[str, list[CalibrationExample]] = defaultdict(list)
-    for example in data:
+    for example in evaluation_data:
         grouped[example.household.purchase_purpose.value].append(example)
     segment_metrics = {
         segment: model.evaluate(segment_examples, weights=weights)
@@ -99,7 +103,7 @@ def build_calibration_diagnostics(
         tolerance=model.tolerance,
     )
     for _ in range(bootstrap_samples):
-        sample = tuple(rng.choice(data) for _ in range(len(data)))
+        sample = tuple(rng.choice(fit_data) for _ in range(len(fit_data)))
         fitted = bootstrap_calibrator.fit(sample)
         for name in FEATURE_NAMES:
             bootstrap_weights[name].append(fitted.weights[name])
@@ -115,11 +119,13 @@ def build_calibration_diagnostics(
     }
 
     warnings: list[str] = []
-    if len(data) < 100:
-        warnings.append("small_sample: fewer than 100 historical choices")
+    if len(fit_data) < 100:
+        warnings.append("small_training_sample: fewer than 100 historical choices")
+    if len(evaluation_data) < 50:
+        warnings.append("small_holdout_sample: fewer than 50 historical choices")
     for segment, metrics in segment_metrics.items():
         if metrics.examples < 20:
-            warnings.append(f"small_segment:{segment}: fewer than 20 examples")
+            warnings.append(f"small_segment:{segment}: fewer than 20 holdout examples")
     for name, interval in intervals.items():
         if interval.lower <= 0 <= interval.upper:
             warnings.append(f"uncertain_coefficient:{name}: interval crosses zero")
