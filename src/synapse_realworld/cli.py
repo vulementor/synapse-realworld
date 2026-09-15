@@ -10,8 +10,19 @@ import typer
 from synapse_realworld.adapters import (
     iter_sales_capture_rows,
     load_events_jsonl,
+    load_offers_csv,
+    load_outcomes_csv,
     load_sales_capture_csv,
+    load_unit_versions_csv,
+    offer_to_event,
+    unit_version_to_event,
 )
+from synapse_realworld.behaviour import MultinomialLogitCalibrator
+from synapse_realworld.data.choice_set import TemporalChoiceSetBuilder
+from synapse_realworld.data.dataset import DecisionDatasetBuilder
+from synapse_realworld.data.decision_assembler import HistoricalDecisionAssembler
+from synapse_realworld.data.projection import project_feature_observations
+from synapse_realworld.data.training import build_calibration_examples, temporal_holdout
 from synapse_realworld.domain.models import Household, Offer, Unit
 from synapse_realworld.ingestion import EventIngestor, build_snapshot
 from synapse_realworld.persistence import DuckDBStore
@@ -102,6 +113,69 @@ def ingest_sales(
     typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
+@app.command("ingest-outcomes")
+def ingest_outcomes(
+    csv_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
+    db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
+    source_id: Annotated[str, typer.Option(help="Stable outcome source identifier")] = (
+        "laa-decision-outcomes"
+    ),
+) -> None:
+    """Ingest verified booking/lost/postpone/contract outcomes."""
+    events = load_outcomes_csv(csv_path, source_id=source_id)
+    snapshot = build_snapshot(
+        source_id=source_id,
+        content=csv_path.read_bytes(),
+        record_count=len(events),
+        metadata={"path": csv_path.name, "adapter": "decision-outcomes-v0.2"},
+    )
+    with DuckDBStore(db) as store:
+        result = EventIngestor(store, store).ingest(
+            source_id=source_id,
+            events=events,
+            snapshot=snapshot,
+        )
+    typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@app.command("ingest-inventory")
+def ingest_inventory(
+    units_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
+    offers_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
+    db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
+) -> None:
+    """Ingest time-versioned unit inventory and offers from canonical CSV exports."""
+    unit_versions = load_unit_versions_csv(units_csv)
+    offers = load_offers_csv(offers_csv)
+    events = tuple(unit_version_to_event(version) for version in unit_versions) + tuple(
+        offer_to_event(offer) for offer in offers
+    )
+    unit_snapshot = build_snapshot(
+        source_id=f"file:{units_csv.name}",
+        content=units_csv.read_bytes(),
+        record_count=len(unit_versions),
+        metadata={"path": units_csv.name, "adapter": "unit-version-csv-v0.2"},
+    )
+    offer_snapshot = build_snapshot(
+        source_id=f"file:{offers_csv.name}",
+        content=offers_csv.read_bytes(),
+        record_count=len(offers),
+        metadata={"path": offers_csv.name, "adapter": "offer-csv-v0.2"},
+    )
+    with DuckDBStore(db) as store:
+        inserted, duplicates = store.append_events(events)
+        unit_recorded = store.record_snapshot(unit_snapshot)
+        offer_recorded = store.record_snapshot(offer_snapshot)
+    payload = {
+        "received": len(events),
+        "inserted": inserted,
+        "duplicates": duplicates,
+        "unit_snapshot_recorded": unit_recorded,
+        "offer_snapshot_recorded": offer_recorded,
+    }
+    typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 @app.command("ingest-jsonl")
 def ingest_jsonl(
     jsonl_path: Annotated[Path, typer.Argument(exists=True, readable=True)],
@@ -124,6 +198,54 @@ def ingest_jsonl(
             snapshot=snapshot,
         )
     typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+@app.command("calibrate")
+def calibrate(
+    units_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
+    offers_csv: Annotated[Path, typer.Option(exists=True, readable=True)],
+    db: Annotated[Path, typer.Option(help="DuckDB database path")] = Path("synapse.duckdb"),
+    holdout_fraction: Annotated[
+        float, typer.Option(min=0.05, max=0.5, help="Latest fraction reserved for validation")
+    ] = 0.2,
+    output: Annotated[Path | None, typer.Option(help="Optional calibration JSON output")] = None,
+) -> None:
+    """Build a leakage-safe historical dataset and fit the v0.2 choice model."""
+    unit_versions = load_unit_versions_csv(units_csv)
+    offers = load_offers_csv(offers_csv)
+    choice_builder = TemporalChoiceSetBuilder(unit_versions=unit_versions, offers=offers)
+    with DuckDBStore(db) as store:
+        events = tuple(store.list_events())
+
+    decisions = HistoricalDecisionAssembler(choice_builder).assemble(events)
+    observations = project_feature_observations(events)
+    rows = DecisionDatasetBuilder().build(events=decisions, observations=observations)
+    timed_examples = build_calibration_examples(rows)
+    if len(timed_examples) < 2:
+        raise typer.BadParameter("at least two verified historical choices are required")
+
+    train, holdout = temporal_holdout(
+        timed_examples,
+        holdout_fraction=holdout_fraction,
+    )
+    calibrator = MultinomialLogitCalibrator()
+    result = calibrator.fit(train)
+    holdout_metrics = calibrator.evaluate(holdout, weights=result.weights)
+    payload = {
+        "model_version": result.model_version,
+        "historical_choices": len(timed_examples),
+        "train_examples": len(train),
+        "holdout_examples": len(holdout),
+        "weights": result.weights,
+        "epochs": result.epochs,
+        "converged": result.converged,
+        "train_metrics": result.metrics.model_dump(mode="json"),
+        "holdout_metrics": holdout_metrics.model_dump(mode="json"),
+    }
+    rendered = json.dumps(payload, ensure_ascii=False, indent=2)
+    if output is not None:
+        output.write_text(rendered + "\n", encoding="utf-8")
+    typer.echo(rendered)
 
 
 @app.command("store-stats")
