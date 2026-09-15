@@ -82,7 +82,9 @@ def _observation(variant: str, successes: int, key: str) -> ExperimentObservatio
     )
 
 
-def test_assignment_registry_requires_prediction_and_blocks_cross_variant_subjects(tmp_path) -> None:
+def test_assignment_registry_requires_prediction_and_blocks_cross_variant_subjects(
+    tmp_path,
+) -> None:
     registry = FileExperimentRegistry(tmp_path / "experiments")
     registry.create(_definition())
     receipt = _receipt("hash:subject-001", "control", key="a1")
