@@ -69,7 +69,7 @@ class FileExperimentRegistry:
         if self.list_assignments(prediction.experiment_id) or self.list_observations(
             prediction.experiment_id
         ):
-            raise ValueError("prediction must be locked before assignments and observations")
+            raise ValueError("prediction must be locked before the first observation or assignment")
         path = self._prediction_path(prediction.experiment_id)
         if path.exists():
             existing = ExperimentPrediction.model_validate_json(path.read_text(encoding="utf-8"))
