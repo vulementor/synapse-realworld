@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from synapse_realworld.domain.enums import OutsideOption, PurchasePurpose
 from synapse_realworld.domain.models import ChoiceAlternative, Household
