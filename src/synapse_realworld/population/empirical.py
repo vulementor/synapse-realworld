@@ -42,6 +42,15 @@ class HouseholdPrototype(PopulationModel):
     def to_household(self, *, household_id: UUID) -> Household:
         return Household(household_id=household_id, **self.model_dump())
 
+    @property
+    def canonical_key(self) -> str:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
 
 class EmpiricalPopulationProfile(PopulationModel):
     name: str
@@ -51,8 +60,12 @@ class EmpiricalPopulationProfile(PopulationModel):
 
     @property
     def content_hash(self) -> str:
-        payload = [prototype.model_dump(mode="json") for prototype in self.prototypes]
-        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        encoded = json.dumps(
+            [json.loads(prototype.canonical_key) for prototype in self.prototypes],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     @property
@@ -87,7 +100,7 @@ def _latest_unique_households(households: Iterable[Household]) -> tuple[Househol
     by_id: dict[UUID, Household] = {}
     for household in households:
         by_id[household.household_id] = household
-    return tuple(by_id[key] for key in sorted(by_id, key=str))
+    return tuple(by_id.values())
 
 
 def fit_empirical_population_profile(
@@ -103,11 +116,13 @@ def fit_empirical_population_profile(
         warnings.append("small_population_sample: fewer than 100 unique households")
     if len(unique_households) < 30:
         warnings.append("very_small_population_sample: synthetic market is exploratory only")
+    prototypes = sorted(
+        (HouseholdPrototype.from_household(household) for household in unique_households),
+        key=lambda prototype: prototype.canonical_key,
+    )
     return EmpiricalPopulationProfile(
         name=name,
-        prototypes=tuple(
-            HouseholdPrototype.from_household(household) for household in unique_households
-        ),
+        prototypes=tuple(prototypes),
         source_households=len(unique_households),
         warnings=tuple(warnings),
     )
