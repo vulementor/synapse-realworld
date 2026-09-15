@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import random
 from collections import Counter, defaultdict
+from collections.abc import Callable, Iterable
 from datetime import datetime
-from typing import Callable, Iterable
 
 from synapse_realworld.behaviour import BaselineUtilityModel
 from synapse_realworld.data import validate_choice_set
