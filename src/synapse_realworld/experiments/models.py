@@ -100,6 +100,30 @@ class ExperimentPrediction(ExperimentModel):
         return self
 
 
+class ExperimentAssignmentReceipt(ExperimentModel):
+    assignment_id: UUID = Field(default_factory=uuid4)
+    experiment_id: UUID
+    subject_key: str
+    variant: str
+    assigned_at: datetime
+    source_id: str
+    source_event_key: str
+    channel: str | None = None
+    cohort: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_assignment(self) -> ExperimentAssignmentReceipt:
+        for field_name in ("subject_key", "variant", "source_id", "source_event_key"):
+            if not str(getattr(self, field_name)).strip():
+                raise ValueError(f"{field_name} is required")
+        if self.channel is not None and not self.channel.strip():
+            raise ValueError("channel cannot be blank")
+        if self.cohort is not None and not self.cohort.strip():
+            raise ValueError("cohort cannot be blank")
+        return self
+
+
 class ExperimentObservation(ExperimentModel):
     observation_id: UUID = Field(default_factory=uuid4)
     experiment_id: UUID

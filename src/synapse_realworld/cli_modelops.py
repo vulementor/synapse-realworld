@@ -32,7 +32,7 @@ def register_modelops_commands(app: typer.Typer) -> None:
             typer.Option(min=0.01, help="Absolute z-score threshold for SRM warning"),
         ] = 3.29,
     ) -> None:
-        """Check experiment allocation, sample sufficiency and causal-design declarations."""
+        """Check assignment allocation, sample sufficiency and causal-design declarations."""
         registry = FileExperimentRegistry(registry_dir)
         definition = registry.get_definition(experiment_id)
         if definition is None:
@@ -40,6 +40,7 @@ def register_modelops_commands(app: typer.Typer) -> None:
         assessment = assess_experiment_quality(
             definition=definition,
             observations=registry.list_observations(experiment_id),
+            assignments=registry.list_assignments(experiment_id),
             expected_treatment_share=expected_treatment_share,
             sample_ratio_z_threshold=sample_ratio_z_threshold,
         )

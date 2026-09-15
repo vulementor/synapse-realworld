@@ -110,6 +110,41 @@ jobs:
             --output "$EXP_PREDICTION" > /tmp/experiment-predict-console.json
           test -s "$EXP_PREDICTION"
 
+          synapse-realworld experiment-assign "$EXPERIMENT_ID" \
+            --subject-key hash:ci-control-1 \
+            --variant control \
+            --source-id ci-assignment \
+            --source-event-key control-1 \
+            --channel meta \
+            --cohort week-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/assign-control-1.json
+          synapse-realworld experiment-assign "$EXPERIMENT_ID" \
+            --subject-key hash:ci-control-2 \
+            --variant control \
+            --source-id ci-assignment \
+            --source-event-key control-2 \
+            --channel meta \
+            --cohort week-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/assign-control-2.json
+          synapse-realworld experiment-assign "$EXPERIMENT_ID" \
+            --subject-key hash:ci-treatment-1 \
+            --variant treatment \
+            --source-id ci-assignment \
+            --source-event-key treatment-1 \
+            --channel meta \
+            --cohort week-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/assign-treatment-1.json
+          synapse-realworld experiment-assign "$EXPERIMENT_ID" \
+            --subject-key hash:ci-treatment-2 \
+            --variant treatment \
+            --source-id ci-assignment \
+            --source-event-key treatment-2 \
+            --channel meta \
+            --cohort week-1 \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/assign-treatment-2.json
+          synapse-realworld experiment-assignments "$EXPERIMENT_ID" \
+            --registry-dir "$EXPERIMENT_REGISTRY" > /tmp/assignments.json
+
           synapse-realworld experiment-observe "$EXPERIMENT_ID" \
             --variant control \
             --successes 20 \
@@ -147,6 +182,7 @@ jobs:
           qa = json.load(open("/tmp/experiment-qa.json"))
           recalibration = json.load(open("/tmp/recalibration-assessment.json"))["assessment"]
           experiments = json.load(open("/tmp/experiments.json"))
+          assignments = json.load(open("/tmp/assignments.json"))
           assert models[0]["status"] == "approved"
           assert uncertainty["model_status"] == "approved"
           assert uncertainty["laa_share"]["p05"] <= uncertainty["laa_share"]["p50"] <= uncertainty["laa_share"]["p95"]
@@ -156,6 +192,10 @@ jobs:
           assert abs(evaluation["observed_effect"] - 0.08) < 1e-12
           assert scorecard["evaluated_experiments"] == 1
           assert scorecard["causal_experiments"] == 1
+          assert len(assignments) == 4
+          assert qa["allocation_source"] == "assignment_receipts"
+          assert qa["control_assignments"] == 2
+          assert qa["treatment_assignments"] == 2
           assert qa["sample_ratio_mismatch"] is False
           assert qa["causal_design_declared"] is True
           assert qa["minimum_sample_reached"] is True
