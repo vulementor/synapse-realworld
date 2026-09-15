@@ -10,6 +10,10 @@ from synapse_realworld.experiments.models import (
 )
 from synapse_realworld.experiments.prediction import prediction_from_scenario_comparison
 from synapse_realworld.experiments.registry import FileExperimentRegistry
+from synapse_realworld.experiments.scorecard import (
+    ModelExperimentScorecard,
+    build_model_experiment_scorecard,
+)
 
 __all__ = [
     "AssignmentMethod",
@@ -19,7 +23,9 @@ __all__ = [
     "ExperimentPrediction",
     "ExperimentStatus",
     "FileExperimentRegistry",
+    "ModelExperimentScorecard",
     "VariantAggregate",
+    "build_model_experiment_scorecard",
     "evaluate_experiment",
     "prediction_from_scenario_comparison",
 ]
