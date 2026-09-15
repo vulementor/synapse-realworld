@@ -43,6 +43,36 @@ class LocationAnchor(SpatialModel):
         return self
 
 
+class HouseholdAnchorObservation(SpatialModel):
+    household_id: UUID
+    anchor_id: str
+    observed_at: datetime
+    source_id: str
+
+    @model_validator(mode="after")
+    def validate_text(self) -> HouseholdAnchorObservation:
+        if not self.anchor_id.strip():
+            raise ValueError("anchor_id is required")
+        if not self.source_id.strip():
+            raise ValueError("source_id is required")
+        return self
+
+
+class TemporalHouseholdAnchorIndex:
+    def __init__(self, observations: Iterable[HouseholdAnchorObservation]) -> None:
+        self.observations = tuple(observations)
+
+    def get(self, household_id: UUID, *, at: datetime) -> HouseholdAnchorObservation | None:
+        candidates = [
+            item
+            for item in self.observations
+            if item.household_id == household_id and item.observed_at <= at
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item.observed_at)
+
+
 class TravelTimeObservation(SpatialModel):
     origin_anchor_id: str
     destination_anchor_id: str
@@ -97,9 +127,10 @@ class TemporalTravelTimeIndex:
 
 
 class HouseholdCommuteProvider:
-    """Adapter compatible with `HistoricalDecisionAssembler.commute_provider`.
+    """Leakage-safe historical commute feature provider.
 
-    Household and unit IDs are mapped to pseudonymous/public location anchors.
+    Prefer `household_anchor_index` for observed workplace changes over time.
+    `household_origin_anchors` remains available for immutable/static contexts.
     Exact private home addresses are intentionally not required.
     """
 
@@ -107,19 +138,30 @@ class HouseholdCommuteProvider:
         self,
         *,
         travel_times: TemporalTravelTimeIndex,
-        household_origin_anchors: Mapping[UUID, str],
         unit_destination_anchors: Mapping[UUID, str],
+        household_anchor_index: TemporalHouseholdAnchorIndex | None = None,
+        household_origin_anchors: Mapping[UUID, str] | None = None,
         mode: TravelMode = TravelMode.MOTORBIKE,
         departure_bucket: DepartureBucket = DepartureBucket.AM_PEAK,
     ) -> None:
+        if household_anchor_index is None and household_origin_anchors is None:
+            raise ValueError("a temporal or static household origin source is required")
         self.travel_times = travel_times
-        self.household_origin_anchors = dict(household_origin_anchors)
+        self.household_anchor_index = household_anchor_index
+        self.household_origin_anchors = dict(household_origin_anchors or {})
         self.unit_destination_anchors = dict(unit_destination_anchors)
         self.mode = mode
         self.departure_bucket = departure_bucket
 
+    def _origin(self, household_id: UUID, at: datetime) -> str | None:
+        if self.household_anchor_index is not None:
+            observation = self.household_anchor_index.get(household_id, at=at)
+            if observation is not None:
+                return observation.anchor_id
+        return self.household_origin_anchors.get(household_id)
+
     def __call__(self, household_id: UUID, unit_id: UUID, at: datetime) -> float | None:
-        origin = self.household_origin_anchors.get(household_id)
+        origin = self._origin(household_id, at)
         destination = self.unit_destination_anchors.get(unit_id)
         if origin is None or destination is None:
             return None
