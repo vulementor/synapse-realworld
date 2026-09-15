@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from synapse_realworld.domain.enums import ProductType, PurchasePurpose
 from synapse_realworld.domain.models import Household
