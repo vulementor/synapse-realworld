@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from synapse_realworld.data import household_from_features, project_feature_observations
 from synapse_realworld.domain.events import CanonicalEvent
+from synapse_realworld.domain.models import Household
 from synapse_realworld.population.empirical import (
     EmpiricalPopulationGenerator,
     EmpiricalPopulationProfile,
@@ -35,7 +36,7 @@ def household_snapshots_from_events(
     events: Iterable[CanonicalEvent],
     *,
     as_of: datetime | None = None,
-) -> tuple:
+) -> tuple[Household, ...]:
     observations = project_feature_observations(tuple(events))
     latest: dict[UUID, dict[str, tuple[datetime, str, Any]]] = defaultdict(dict)
     for observation in observations:
@@ -46,7 +47,7 @@ def household_snapshots_from_events(
         if current is None or candidate[:2] > current[:2]:
             latest[observation.household_id][observation.feature_name] = candidate
 
-    households = []
+    households: list[Household] = []
     for household_id in sorted(latest, key=str):
         features = {
             feature_name: value
