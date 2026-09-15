@@ -119,8 +119,9 @@ class HistoricalDecisionAssembler:
             selected = self._selected_alternative_id(event)
             available_ids = {alternative.alternative_id for alternative in alternatives}
             if selected is not None and selected not in available_ids:
+                timestamp = event.occurred_at.isoformat()
                 raise ValueError(
-                    f"selected alternative {selected!r} was unavailable at {event.occurred_at.isoformat()}"
+                    f"selected alternative {selected!r} was unavailable at {timestamp}"
                 )
 
             decisions.append(
