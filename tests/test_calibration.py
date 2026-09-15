@@ -1,8 +1,17 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from synapse_realworld.behaviour import CalibrationExample, MultinomialLogitCalibrator, UtilityWeights
-from synapse_realworld.domain.enums import InventoryState, OutsideOption, ProductType, PurchasePurpose
+from synapse_realworld.behaviour import (
+    CalibrationExample,
+    MultinomialLogitCalibrator,
+    UtilityWeights,
+)
+from synapse_realworld.domain.enums import (
+    InventoryState,
+    OutsideOption,
+    ProductType,
+    PurchasePurpose,
+)
 from synapse_realworld.domain.models import ChoiceAlternative, Household, Offer, Unit
 
 PROJECT_ID = UUID("11111111-1111-1111-1111-111111111111")
