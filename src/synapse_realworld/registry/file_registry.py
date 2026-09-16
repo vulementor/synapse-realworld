@@ -88,7 +88,10 @@ class FileModelRegistry:
             for line in handle:
                 if line.strip():
                     decisions.append(ModelDecision.model_validate_json(line))
-        return tuple(sorted(decisions, key=lambda item: (item.decided_at, str(item.decision_id))))
+        # The decision file is append-only, so file order is the governance order.
+        # Do not re-sort by timestamp: two sequential decisions can legitimately
+        # share the same clock timestamp on platforms with coarse timer resolution.
+        return tuple(decisions)
 
     def get(self, artifact_id: UUID) -> RegisteredModel | None:
         path = self._artifact_path(artifact_id)
