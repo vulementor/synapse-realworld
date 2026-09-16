@@ -1,0 +1,53 @@
+name: LAA Productionization
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  productionization:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Connector profiles
+        run: synapse-realworld laa-connectors > /tmp/laa-connectors.json
+      - name: Connector ingest and readiness audit
+        run: |
+          DB=/tmp/laa-productionization.duckdb
+          AUDIT=/tmp/laa-data-audit.json
+
+          synapse-realworld init-store --db "$DB"
+          synapse-realworld laa-ingest-csv crm_leads \
+            examples/data/laa_crm_leads_connector_sample.csv \
+            --source-id crm-production \
+            --db "$DB" > /tmp/crm-ingest-1.json
+          synapse-realworld laa-ingest-csv crm_leads \
+            examples/data/laa_crm_leads_connector_sample.csv \
+            --source-id crm-production \
+            --db "$DB" > /tmp/crm-ingest-2.json
+          synapse-realworld data-audit --db "$DB" --output "$AUDIT" > /tmp/audit-console.json
+
+          python - <<'PY'
+          import json
+          first = json.load(open("/tmp/crm-ingest-1.json"))
+          second = json.load(open("/tmp/crm-ingest-2.json"))
+          audit = json.load(open("/tmp/laa-data-audit.json"))
+          profiles = json.load(open("/tmp/laa-connectors.json"))
+          assert "crm_leads" in profiles
+          assert "sap_outcomes" in profiles
+          assert "inventory" in profiles
+          assert "offers" in profiles
+          assert "ads" in profiles
+          assert "website" in profiles
+          assert first["ingestion"]["inserted"] == 2
+          assert second["ingestion"]["inserted"] == 0
+          assert second["ingestion"]["duplicates"] == 2
+          assert audit["training_ready"] is False
+          assert "no_structured_qualification_history" in audit["blockers"]
+          assert "no_verified_decision_outcomes" in audit["blockers"]
+          PY
