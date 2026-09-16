@@ -127,6 +127,11 @@ def run_laa_calibration_001(
     if not code_commit_sha.strip():
         raise ValueError("code_commit_sha is required")
 
+    output = Path(output_dir)
+    if output.exists() and any(output.iterdir()):
+        raise ValueError("calibration output directory must be empty; runs are immutable")
+    output.mkdir(parents=True, exist_ok=True)
+
     events_path = snapshot_root / snapshot.events_file.filename
     units_path = _snapshot_input(snapshot_root, snapshot, "unit_versions")
     offers_path = _snapshot_input(snapshot_root, snapshot, "offers")
@@ -138,9 +143,6 @@ def run_laa_calibration_001(
     unit_versions = load_unit_versions_csv(units_path)
     offers = load_offers_csv(offers_path)
     travel_times = load_travel_times_csv(travel_path) if travel_path is not None else ()
-
-    output = Path(output_dir)
-    output.mkdir(parents=True, exist_ok=True)
 
     population_fit = fit_population_from_events(
         events,
