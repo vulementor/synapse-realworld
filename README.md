@@ -1,389 +1,299 @@
 # Synapse Real-World Platform
 
-**Synapse Real-World Platform** is a library-first platform for modeling, simulating, validating, governing, and experimentally testing real-world decisions with calibrated behavioral models, empirical synthetic populations, versioned evidence, spatial features, uncertainty, and agentic interfaces.
+**Synapse Real-World Platform** is a library-first platform for reconstructing, simulating, validating and prospectively testing real-world decisions with versioned evidence, calibrated behavioural models, empirical synthetic populations and human-governed model operations.
 
-The first reference implementation is **Lan Anh Avenue (LAA) Decision Twin / Synthetic Market**: a real-estate market model that reconstructs historical buyer choice sets, estimates how demand changes when **price × payment plan × commute × product type** changes, and prospectively checks those forecasts against real-world experiments.
+The first reference implementation is the **Lan Anh Avenue (LAA) Decision Twin / Synthetic Market**.
 
-> The goal is not to build another CRM, chatbot, or 3D showroom. The goal is to build a reproducible decision layer that can answer counterfactual questions, quantify uncertainty, and learn from predicted-vs-actual outcomes.
+> The goal is not to build another CRM, chatbot or 3D showroom. The goal is to build a reproducible decision layer that can answer counterfactual questions, quantify uncertainty and learn from predicted-vs-actual outcomes.
 
-## Core principles
+## Current status — v0.8
 
-- **Library-first**: Python SDK is the source of truth; CLI and future APIs are adapters.
-- **Append-only evidence**: source observations are preserved with provenance and deterministic dedupe keys.
-- **Time-correct decisions**: historical choice sets reflect inventory, offers and buyer evidence actually available at decision time.
-- **Outside options are mandatory**: competitor, land/house, rent, postpone, or no purchase.
-- **Behavior before spectacle**: prove calibrated decision models before investing heavily in BIM/3D/Spatial World layers.
-- **LLM is not the probability engine**: LLMs may extract reasons, summarize context, and explain outputs; calibrated statistical/ML models produce core choice probabilities.
-- **Empirical synthetic population**: synthetic households are fitted from observed qualification evidence and preserve joint feature combinations.
-- **Uncertainty is explicit**: scenario results expose point estimates plus ensemble p05/p50/p95 rather than a single false-precision number.
-- **Prospective validation**: experiment predictions are locked before observed outcomes arrive; backdated observations are rejected.
-- **Causal claims are gated**: only randomized/hash-randomized assignment is automatically marked as supporting causal interpretation.
-- **Reproducibility**: simulations, source snapshots, population profiles, model artifacts and experiment predictions carry input/version/code metadata.
-- **Privacy by design**: historical IDs are not persisted into empirical population profiles; PII remains outside the analytical domain.
-- **Human-governed models**: training creates a candidate; validation and approval are explicit append-only decisions.
-- **Human-governed actions**: v0.x provides decision support, not autonomous pricing, financing, legal, or customer execution.
+The current release line implements:
 
-## Platform layers
+- canonical append-only evidence contracts;
+- DuckDB local persistence and a PostgreSQL production seam;
+- temporal inventory / offer reconstruction;
+- leakage-safe historical choice datasets;
+- multinomial-logit calibration with bootstrap uncertainty;
+- empirical ID-free synthetic population fitting;
+- governed model lifecycle: `candidate → validated → approved/rejected → archived`;
+- scenario uncertainty with p05 / p50 / p95;
+- prospective experiment prediction lock;
+- assignment receipts and experiment QA;
+- predicted-vs-actual evaluation and model scorecards;
+- LAA production connector profiles and `data-audit` readiness gates;
+- immutable **LAA Real Dataset Snapshot #001** workflow;
+- governed **LAA Calibration Run #001** workflow;
+- governed **LAA Prospective Experiment #001 — Commute Perception** workflow.
 
-```text
-Data Sources
-CRM · SAP · Inventory · Offers · Ads · Sales · GIS · Market
-      │
-      ▼
-Source adapters / canonical JSONL
-      │
-      ▼
-Append-only Canonical Event Store
-DuckDB local · PostgreSQL production · source snapshots · provenance
-      │
-      ▼
-Canonical Decision Model
-Households · Units · Offers · Reasons · Choice Sets · Outcomes
-      │
-      ├──────────────► Temporal Spatial Evidence
-      │                workplace anchors · travel time · reliability
-      │
-      ▼
-Decision Dataset
-Time-correct snapshots · future-leakage guard · temporal holdout
-      │
-      ├──────────────► Behaviour Engine
-      │                multinomial logit · bootstrap · diagnostics
-      │
-      └──────────────► Empirical Population Fitter
-                       qualification evidence · joint prototypes
-                               │
-                               ▼
-                     Synthetic Market Population
-                         5k–10k+ households
-                               │
-                               ▼
-                         Scenario Ensemble
-                  price · payment · commute · product
-                               │
-                               ▼
-                  Point estimate + uncertainty
-                     p05 · p50 · p95 · min/max
-                               │
-                               ▼
-                   Paired scenario comparison
-                               │
-                               ▼
-                  Locked experiment prediction
-                               │
-                               ▼
-                Real A/B outcomes · append-only
-                               │
-                               ▼
-                Predicted-vs-actual evaluation
-                               │
-                               ▼
-                   Model experiment scorecard
+The three LAA milestone workflows are implemented, but the repository does **not** claim that the real production Snapshot #001, Calibration Run #001 or Experiment #001 have been completed merely because synthetic CI fixtures pass.
 
-Calibrated model
-      │
-      ▼
-Immutable Model Artifact
-code SHA · dataset snapshot · metrics · bootstrap vectors
-      │
-      ▼
-candidate → validated → approved/rejected → archived
+See [`docs/CURRENT_STATUS_V0_8.md`](docs/CURRENT_STATUS_V0_8.md) for the implementation source of truth.
+
+## Install on Windows
+
+Requirements:
+
+- Git
+- Python 3.11
+- Windows PowerShell 5.1+ or PowerShell 7+
+
+Clone and install:
+
+```powershell
+git clone https://github.com/vulementor/synapse-realworld.git
+cd synapse-realworld
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
 ```
 
-Future layers can add richer competitor worlds, GIS/BIM/3D, IoT, construction, facility, autonomous-asset intelligence, multi-model champion/challenger testing, and automated drift workflows without changing the core evidence contracts.
+The setup helper creates `.venv`, installs `.[dev]`, verifies package version and checks the CLI.
 
-## Current scope: v0.5 Experiment Loop
+Activate manually when needed:
 
-The codebase now provides:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
 
-- immutable canonical domain models with Pydantic;
-- append-only `CanonicalEvent` and `SourceSnapshot` evidence contracts;
-- deterministic idempotency and SHA-256 source snapshot fingerprints;
-- DuckDB local event/snapshot persistence;
-- PostgreSQL production event/snapshot persistence adapter + SQL migration;
-- Sales Capture, inventory, offer and verified-outcome adapters;
-- declarative source mapping + canonical JSONL integration seam;
-- deterministic pseudonymous analytics identity mapping;
-- temporal choice-set reconstruction and mandatory outside options;
-- leakage-safe historical Decision Dataset builder;
-- temporal workplace anchors and travel-time evidence;
-- chronological train/holdout split;
-- trainable multinomial-logit baseline;
-- bootstrap coefficient intervals and retained full bootstrap parameter vectors;
-- holdout segment diagnostics and uniform-choice baseline comparison;
-- immutable governed model artifacts and append-only approval lifecycle;
-- empirical population fitting from qualification events, not only final buyers;
-- ID-free household feature prototypes with deterministic population content hash;
-- joint household bootstrap preserving observed cross-feature relationships;
-- population diagnostics using marginal TV distance and numeric mean comparisons;
-- real-data scenario simulator from temporal units/offers/travel evidence;
-- uncertainty ensemble using common random numbers across bootstrap parameter vectors;
-- paired control/treatment scenario comparison using the same populations and random streams;
-- immutable experiment definitions and prospectively locked predictions;
-- append-only, idempotent experiment observations;
-- predicted-vs-actual experiment evaluation with effect confidence interval and forecast error;
-- causal-interpretation guard based on assignment method;
-- per-model experiment scorecard with MAE, interval coverage and direction accuracy;
-- approved-model requirement for governed scenario/experiment predictions by default;
-- CLI workflows and GitHub Actions full closed-loop tests.
+Full installation and troubleshooting guide:
 
-## Quick start
+[`docs/INSTALL_AND_TEST.md`](docs/INSTALL_AND_TEST.md)
 
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\Activate.ps1  # Windows PowerShell
+## Run tests on Windows
 
-pip install -e ".[dev]"
+Fast smoke test:
 
-synapse-realworld demo --population 1000 --seed 42
-synapse-realworld schema household
+```powershell
+.\scripts\test.ps1 -Mode quick
+```
+
+Core lint + full pytest:
+
+```powershell
+.\scripts\test.ps1 -Mode unit
+```
+
+LAA v0.8 milestone contracts:
+
+```powershell
+.\scripts\test.ps1 -Mode milestones
+```
+
+LAA connector / productionization contracts:
+
+```powershell
+.\scripts\test.ps1 -Mode productionization
+```
+
+Everything:
+
+```powershell
+.\scripts\test.ps1 -Mode full
+```
+
+GitHub also runs the same setup/test path on a Windows runner through the **Windows Local Runbook** workflow.
+
+## Manual install
+
+Windows:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+synapse-realworld --help
 pytest
 ```
 
-## Real-data → Synthetic Market workflow
-
-The files under `examples/data/` are synthetic fixtures and contain no real customer information.
+Linux / macOS:
 
 ```bash
-DB=./synapse.duckdb
-REGISTRY=./model_registry
-POPULATION=./population_profile.json
-
-synapse-realworld init-store --db "$DB"
-
-synapse-realworld ingest-sales \
-  examples/data/laa_sales_capture_sample.csv \
-  --db "$DB"
-
-synapse-realworld ingest-outcomes \
-  examples/data/laa_outcomes_sample.csv \
-  --db "$DB"
-
-synapse-realworld ingest-inventory \
-  --units-csv examples/data/laa_unit_versions_sample.csv \
-  --offers-csv examples/data/laa_offers_sample.csv \
-  --db "$DB"
-
-synapse-realworld fit-population \
-  --db "$DB" \
-  --profile-name laa-market-2026-09 \
-  --minimum-profile-confidence 0.3 \
-  --diagnostic-population-size 5000 \
-  --output "$POPULATION"
-
-synapse-realworld calibrate \
-  --units-csv examples/data/laa_unit_versions_sample.csv \
-  --offers-csv examples/data/laa_offers_sample.csv \
-  --travel-times-csv examples/data/laa_travel_times_sample.csv \
-  --project-anchor-id LAA \
-  --db "$DB" \
-  --registry-dir "$REGISTRY" \
-  --model-version v0.5 \
-  --code-commit-sha "$(git rev-parse HEAD)" \
-  --bootstrap-samples 100 \
-  --output calibration.json
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+ruff check .
+pytest
+synapse-realworld demo --population 50 --seed 42
 ```
 
-Calibration registers a **candidate**. It does not auto-approve it.
+Optional PostgreSQL dependency:
 
 ```bash
-ARTIFACT_ID=<uuid-from-calibration-output>
-
-synapse-realworld model-decide "$ARTIFACT_ID" \
-  --status validated \
-  --decided-by data-lead \
-  --reason "Temporal holdout and diagnostics reviewed" \
-  --registry-dir "$REGISTRY"
-
-synapse-realworld model-decide "$ARTIFACT_ID" \
-  --status approved \
-  --decided-by business-owner \
-  --reason "Approved for bounded decision support" \
-  --registry-dir "$REGISTRY"
+python -m pip install -e ".[dev,postgres]"
 ```
 
-Then run a scenario with uncertainty:
+## Quick CLI smoke
 
-```bash
-synapse-realworld simulate-uncertainty "$ARTIFACT_ID" \
-  --population-profile "$POPULATION" \
-  --units-csv examples/data/laa_unit_versions_sample.csv \
-  --offers-csv examples/data/laa_offers_sample.csv \
-  --travel-times-csv examples/data/laa_travel_times_sample.csv \
-  --project-anchor-id LAA \
-  --as-of 2026-09-15T08:00:00+07:00 \
-  --registry-dir "$REGISTRY" \
-  --scenario-id laa-price-plus-5 \
-  --price-change 0.05 \
-  --population-size 10000 \
-  --output scenario_price_plus_5.json
+```powershell
+synapse-realworld demo --population 1000 --seed 42
+synapse-realworld schema household
+synapse-realworld laa-connectors
 ```
 
-The result includes a central point estimate plus uncertainty summaries for LAA share, outside-option share, individual alternatives and segment LAA share.
+The files under `examples/data/` are **synthetic fixtures** and contain no real customer data.
 
-## Prospective experiment loop
+## Platform flow
 
-Create an experiment before outcomes exist:
-
-```bash
-EXPERIMENT_REGISTRY=./experiment_registry
-
-synapse-realworld experiment-create \
-  --name "LAA payment-plan experiment" \
-  --hypothesis "Lower near-term payment burden increases LAA choice rate" \
-  --created-by growth-lead \
-  --assignment-method randomized \
-  --minimum-trials-per-variant 100 \
-  --registry-dir "$EXPERIMENT_REGISTRY"
+```text
+CRM / SAP / Inventory / Offers / Ads / Sales / GIS
+                    │
+                    ▼
+       Source connectors + provenance
+                    │
+                    ▼
+       Append-only Canonical Event Store
+                    │
+                    ▼
+      Time-correct Decision Dataset
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+Behaviour calibration     Population fitting
+        │                       │
+        └───────────┬───────────┘
+                    ▼
+             Synthetic Market
+                    │
+                    ▼
+        Scenario uncertainty ensemble
+                    │
+                    ▼
+       Locked prospective prediction
+                    │
+                    ▼
+ Assignment / exposure / real outcomes
+                    │
+                    ▼
+      Predicted-vs-actual evaluation
+                    │
+                    ▼
+      Model scorecard / review trigger
 ```
 
-Lock a paired model prediction before accepting observations:
+## LAA production execution order
 
-```bash
-EXPERIMENT_ID=<uuid-from-experiment-create>
+With verified real evidence, the governed sequence is:
 
-synapse-realworld experiment-predict "$EXPERIMENT_ID" "$ARTIFACT_ID" \
-  --population-profile "$POPULATION" \
-  --units-csv examples/data/laa_unit_versions_sample.csv \
-  --offers-csv examples/data/laa_offers_sample.csv \
-  --travel-times-csv examples/data/laa_travel_times_sample.csv \
-  --project-anchor-id LAA \
-  --as-of 2026-09-15T08:00:00+07:00 \
-  --experiment-registry-dir "$EXPERIMENT_REGISTRY" \
-  --model-registry-dir "$REGISTRY" \
-  --control-payment-multiplier 1.0 \
-  --treatment-payment-multiplier 0.85 \
-  --population-size 10000 \
-  --output prediction.json
+```text
+1. Verify source schemas and semantics
+2. Backfill 60–90+ days idempotently
+3. Run data-audit
+4. Close blockers / document residual warnings
+5. Freeze LAA Real Dataset Snapshot #001
+6. Verify Snapshot #001 hashes
+7. Run LAA Calibration Run #001
+8. Review temporal holdout + uncertainty
+9. Human validate / approve or reject model
+10. Pre-register Experiment #001
+11. Lock forecast before assignments
+12. Run hash-randomized eligible cohort
+13. Capture assignment + exposure evidence
+14. Append real outcomes
+15. Evaluate predicted vs actual
+16. Update model scorecard / recalibration assessment
 ```
 
-Append actual outcomes:
+Do not bypass readiness or human approval by substituting synthetic fixtures for production evidence.
 
-```bash
-synapse-realworld experiment-observe "$EXPERIMENT_ID" \
-  --variant control \
-  --successes 22 \
-  --trials 120 \
-  --source-id crm-experiment-export \
-  --source-event-key control-week-1 \
-  --registry-dir "$EXPERIMENT_REGISTRY"
+## v0.8 milestone commands
 
-synapse-realworld experiment-observe "$EXPERIMENT_ID" \
-  --variant treatment \
-  --successes 31 \
-  --trials 120 \
-  --source-id crm-experiment-export \
-  --source-event-key treatment-week-1 \
-  --registry-dir "$EXPERIMENT_REGISTRY"
+Snapshot:
+
+```text
+laa-snapshot-001-create
+laa-snapshot-001-verify
 ```
 
-Evaluate forecast accuracy and inspect the model scorecard:
+Calibration:
 
-```bash
-synapse-realworld experiment-evaluate "$EXPERIMENT_ID" \
-  --registry-dir "$EXPERIMENT_REGISTRY" \
-  --output evaluation.json
-
-synapse-realworld experiment-scorecard "$ARTIFACT_ID" \
-  --registry-dir "$EXPERIMENT_REGISTRY"
-
-synapse-realworld experiments --registry-dir "$EXPERIMENT_REGISTRY"
+```text
+laa-calibration-001-run
 ```
 
-For an external connector or agent harness, emit canonical events as JSONL:
+Prospective experiment:
 
-```bash
-synapse-realworld ingest-jsonl events.jsonl \
-  --source-id crm-production \
-  --db synapse.duckdb
+```text
+laa-experiment-001-create
+laa-experiment-001-lock
 ```
 
-## Python SDK
+Detailed runbooks:
 
-```python
-from synapse_realworld.projects.laa import build_laa_demo_world
-from synapse_realworld.simulation import Scenario
+- [`docs/LAA_REAL_DATASET_SNAPSHOT_001.md`](docs/LAA_REAL_DATASET_SNAPSHOT_001.md)
+- [`docs/LAA_CALIBRATION_RUN_001.md`](docs/LAA_CALIBRATION_RUN_001.md)
+- [`docs/LAA_PROSPECTIVE_EXPERIMENT_001.md`](docs/LAA_PROSPECTIVE_EXPERIMENT_001.md)
 
-world = build_laa_demo_world(seed=42)
-result = world.simulate(
-    Scenario(
-        scenario_id="laa-price-plus-5",
-        price_change_pct=0.05,
-        payment_plan_code="PLAN_A",
-        commute_multiplier=1.0,
-    ),
-    population_size=1000,
-    seed=42,
-)
+## Core design rules
 
-print(result.choice_share)
-```
-
-The library also exposes empirical population fitting, real-data simulator factories, governed model registries, paired scenario comparisons, experiment registries, evaluation APIs and model experiment scorecards for integration into other harnesses.
+- **Library-first** — Python SDK is the source of truth; CLI/API layers are adapters.
+- **Evidence first** — source observations carry provenance and deterministic dedupe keys.
+- **Time-correct** — historical decisions may only see inventory/offers/features available at that time.
+- **Outside options are mandatory** — competitor, land/house, rent, postpone or no purchase.
+- **LLM is not the probability engine** — calibrated statistical/ML models produce core probabilities.
+- **Uncertainty is explicit** — scenario results carry intervals, not fake precision.
+- **Privacy by design** — PII stays outside the analytical domain; IDs are pseudonymous.
+- **Human-governed models** — training creates candidates; approval is explicit and append-only.
+- **Prospective validation** — predictions are locked before assignment/outcomes.
+- **No autonomous sensitive actions** — v0.x is decision support, not autonomous pricing, financing, legal or customer execution.
 
 ## Repository layout
 
 ```text
 src/synapse_realworld/
-  adapters/        # CSV/JSONL/source/spatial mapping adapters
-  behaviour/       # utility, calibration, bootstrap diagnostics, workflow
-  data/            # choice sets, projection, datasets, quality/training
-  domain/          # canonical contracts, events, temporal identity
-  experiments/     # definitions, locked predictions, observations, evaluation, scorecards
-  ingestion/       # idempotent ingestion pipeline
-  persistence/     # DuckDB local + PostgreSQL production stores
-  population/      # empirical fitting, ID-free prototypes, generators, diagnostics
-  registry/        # immutable model artifacts + governance decisions
-  simulation/      # scenario engine, comparison, real-data factory, uncertainty ensemble
-  spatial/         # temporal location anchors and travel-time features
-  projects/laa/    # Lan Anh Avenue reference implementation
-  cli.py           # core CLI commands
-  cli_market.py    # Synthetic Market CLI extension
-  cli_experiments.py # Experiment Loop CLI extension
-  cli_entry.py     # composed CLI entrypoint
-examples/data/      # synthetic pipeline fixtures
-sql/postgres/       # production migrations
-tests/              # unit/integration/E2E-support tests
-docs/               # architecture and implementation notes
+  adapters/          CSV / JSONL / temporal evidence adapters
+  audit/             LAA evidence coverage and readiness
+  behaviour/         utility, calibration, diagnostics
+  connectors/        governed LAA production mapping profiles
+  data/              choice sets, projections, training datasets
+  datasets/          immutable dataset snapshot contracts
+  domain/            canonical events, identity, temporal contracts
+  experiments/       definitions, predictions, assignments, evaluation
+  ingestion/         idempotent ingestion pipeline
+  milestones/        LAA Snapshot / Calibration / Experiment orchestration
+  persistence/       DuckDB + PostgreSQL seams
+  population/        empirical population fitting / diagnostics
+  registry/          immutable model artifacts + governance decisions
+  simulation/        scenario engine / uncertainty / comparison
+  spatial/           temporal anchors and commute evidence
+  projects/laa/      LAA reference implementation
+scripts/
+  setup.ps1          Windows one-command development setup
+  test.ps1           Windows quick/unit/milestone/full test runner
+examples/data/       synthetic fixtures only
+sql/postgres/        production migrations
+tests/               unit + integration + governance tests
+docs/                architecture, runbooks, current status
 ```
 
-## LAA decision questions
+## CI gates
 
-1. What happens to LAA choice share when effective price changes ±3–5%, and what is the p05–p95 uncertainty range?
-2. What happens when net price stays constant but near-term monthly cash-flow burden changes?
-3. How does measured commute vs perceived commute affect preference and campaign response?
-4. How do households substitute between townhouse / garden townhouse / villa / shophouse and outside options?
-5. Which segments are most sensitive to each scenario, and is the conclusion stable across bootstrap model fits?
-6. When a predicted treatment is tested prospectively, did the real effect match the forecast range and direction?
-7. Across repeated experiments, is the approved model remaining calibrated in real-world use?
+Current workflow families:
+
+- **CI** — Ruff, full pytest, deterministic demo and Model Operations closed-loop.
+- **LAA Productionization** — connector profiles, pseudonymous ingest, idempotency and readiness audit.
+- **LAA Milestones** — Snapshot #001, Calibration #001 and Experiment #001 contract tests.
+- **Windows Local Runbook** — executes the documented `setup.ps1` and `test.ps1 -Mode full` path on Windows.
 
 ## Roadmap
 
-- **v0.1 — Foundation:** contracts, quality gates, deterministic demo simulation. ✅
-- **v0.2 — Real data pipeline:** event store, snapshots, adapters, historical assembly, trainable logit baseline. ✅
-- **v0.3 — Calibrated Decision Twin:** uncertainty diagnostics, temporal commute, governed model registry. ✅
-- **v0.4 — Synthetic Market:** empirical population fitting, approved-model scenario ensembles, p05/p50/p95 uncertainty. ✅
-- **v0.5 — Experiment Loop:** prospective prediction lock, A/B outcomes, predicted-vs-actual evaluation and model scorecards. ✅
-- **v0.6 — Model Operations:** champion/challenger, experiment-design QA, drift thresholds and governed recalibration triggers.
-- **v1.x — Spatial Real-World:** richer GIS/BIM/3D/IoT layers and autonomous-asset intelligence.
+- **v0.1 — Foundation** ✅
+- **v0.2 — Real Data Pipeline** ✅
+- **v0.3 — Calibrated Decision Twin** ✅
+- **v0.4 — Synthetic Market** ✅
+- **v0.5 — Experiment Loop** ✅
+- **v0.6 — Model Operations + assignment evidence** ✅
+- **v0.7 — LAA Productionization + connector/readiness layer** ✅
+- **v0.8 — Immutable LAA milestone orchestration** ✅
+- **next — real LAA evidence normalization + Outcome Connector + Snapshot #001 execution**
+- **later — market-bias correction, richer competitor world, exposure reconciliation, champion/challenger, decision dashboard**
+- **v1.x — richer GIS/BIM/3D/IoT / Spatial Real-World layers**
 
-See:
+## Production boundary
 
-- [`docs/REAL_DATA_PIPELINE_V0_2.md`](docs/REAL_DATA_PIPELINE_V0_2.md)
-- [`docs/CALIBRATED_DECISION_TWIN_V0_3.md`](docs/CALIBRATED_DECISION_TWIN_V0_3.md)
-- [`docs/SYNTHETIC_MARKET_V0_4.md`](docs/SYNTHETIC_MARKET_V0_4.md)
-- [`docs/EXPERIMENT_LOOP_V0_5.md`](docs/EXPERIMENT_LOOP_V0_5.md)
+The public repository must not contain raw customer PII or private production datasets. Verified LAA evidence should be ingested through pseudonymous connectors and stored in approved private/local production storage.
 
-## Important boundary
-
-The repository fixtures and LAA demo values remain **synthetic placeholders**. An empirical population fitted from CRM/Sales qualification evidence represents the **observed evidence base**, not automatically the total addressable market or all households around LAA.
-
-Real production use must account for evidence quality and potential biases such as campaign/channel acquisition bias, missing offline buyers, nonresponse, competitor exposure, changing macro conditions, and external demographic/workforce constraints. Model approval is a governance record, not proof of market truth.
-
-A locked experiment prediction plus a randomized assignment supports prospective validation, but it does not eliminate operational threats such as sample-ratio mismatch, contamination, attrition, interference, implementation drift or repeated/sequential testing. Non-randomized experiment results are explicitly treated as associative rather than causal.
-
-The platform must not be used to make autonomous legally binding pricing, financing, credit, legal, or individual-customer decisions without the appropriate human controls and validation.
+Passing CI proves software contracts, not market truth. A model approval is a governance record, not proof that a model is universally valid.
 
 ## License
 
