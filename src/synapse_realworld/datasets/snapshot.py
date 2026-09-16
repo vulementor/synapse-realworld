@@ -335,7 +335,10 @@ def verify_laa_snapshot_directory(path: str | Path) -> LAARealDatasetSnapshotMan
     manifest = load_laa_snapshot_manifest(root)
     events_path = root / manifest.events_file.filename
     snapshots_path = root / manifest.source_snapshots_file.filename
-    if _file_fingerprint(events_path, role="canonical_events").sha256 != manifest.events_file.sha256:
+    if (
+        _file_fingerprint(events_path, role="canonical_events").sha256
+        != manifest.events_file.sha256
+    ):
         raise ValueError("events file hash does not match snapshot manifest")
     if (
         _file_fingerprint(snapshots_path, role="source_snapshots").sha256
