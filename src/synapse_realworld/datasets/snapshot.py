@@ -38,6 +38,7 @@ class LAARealDatasetSnapshotManifest(SnapshotModel):
     event_semantic_sha256: str
     events_file: FileFingerprint
     source_snapshot_count: int = Field(ge=0)
+    source_snapshot_semantic_sha256: str
     source_snapshots_file: FileFingerprint
     input_files: tuple[FileFingerprint, ...]
     event_types: dict[str, int]
@@ -97,6 +98,30 @@ def _semantic_event_bytes(events: Iterable[CanonicalEvent]) -> bytes:
     return ("\n".join(rows) + ("\n" if rows else "")).encode("utf-8")
 
 
+def _semantic_source_snapshot_bytes(snapshots: Iterable[SourceSnapshot]) -> bytes:
+    rows = []
+    for snapshot in sorted(
+        snapshots,
+        key=lambda item: (item.source_id, item.content_hash, item.schema_version),
+    ):
+        rows.append(
+            json.dumps(
+                {
+                    "source_id": snapshot.source_id,
+                    "content_hash": snapshot.content_hash,
+                    "record_count": snapshot.record_count,
+                    "schema_version": snapshot.schema_version,
+                    "metadata": snapshot.metadata,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+        )
+    return ("\n".join(rows) + ("\n" if rows else "")).encode("utf-8")
+
+
 def _filter_window(
     events: Iterable[CanonicalEvent],
     *,
@@ -138,6 +163,15 @@ def _write_full_events(path: Path, events: Iterable[CanonicalEvent]) -> None:
             handle.write("\n")
 
 
+def _load_full_events(path: Path) -> tuple[CanonicalEvent, ...]:
+    events = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                events.append(CanonicalEvent.model_validate_json(line))
+    return tuple(events)
+
+
 def _write_source_snapshots(path: Path, snapshots: Iterable[SourceSnapshot]) -> None:
     rows = [
         snapshot.model_dump(mode="json")
@@ -152,8 +186,13 @@ def _write_source_snapshots(path: Path, snapshots: Iterable[SourceSnapshot]) -> 
     )
 
 
+def _load_source_snapshots(path: Path) -> tuple[SourceSnapshot, ...]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(SourceSnapshot.model_validate(item) for item in payload)
+
+
 def _copy_input(path: Path, target_dir: Path, *, role: str) -> FileFingerprint:
-    destination = target_dir / path.name
+    destination = target_dir / f"{role}__{path.name}"
     shutil.copyfile(path, destination)
     return _file_fingerprint(destination, role=role)
 
@@ -165,7 +204,7 @@ def _manifest_identity_payload(
     window_from: datetime | None,
     window_to: datetime | None,
     event_semantic_sha256: str,
-    source_snapshots_sha256: str,
+    source_snapshot_semantic_sha256: str,
     input_files: tuple[FileFingerprint, ...],
 ) -> dict[str, Any]:
     return {
@@ -174,9 +213,22 @@ def _manifest_identity_payload(
         "window_from": window_from.isoformat() if window_from else None,
         "window_to": window_to.isoformat() if window_to else None,
         "event_semantic_sha256": event_semantic_sha256,
-        "source_snapshots_sha256": source_snapshots_sha256,
-        "input_files": [item.model_dump(mode="json") for item in input_files],
+        "source_snapshot_semantic_sha256": source_snapshot_semantic_sha256,
+        "input_files": [
+            item.model_dump(mode="json")
+            for item in sorted(input_files, key=lambda value: value.role)
+        ],
     }
+
+
+def _dataset_snapshot_id(identity: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        identity,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"sha256:{_sha256_bytes(encoded)}"
 
 
 def create_laa_real_dataset_snapshot(
@@ -192,6 +244,8 @@ def create_laa_real_dataset_snapshot(
     snapshot_version: str = "001",
 ) -> LAARealDatasetSnapshotManifest:
     output = Path(output_dir)
+    if output.exists() and any(output.iterdir()):
+        raise ValueError("snapshot output directory must be empty; snapshots are immutable")
     output.mkdir(parents=True, exist_ok=True)
     evidence_dir = output / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -203,12 +257,14 @@ def create_laa_real_dataset_snapshot(
     )
     events_path = output / "events.jsonl"
     _write_full_events(events_path, selected_events)
-    semantic_bytes = _semantic_event_bytes(selected_events)
-    semantic_hash = _sha256_bytes(semantic_bytes)
+    event_semantic_hash = _sha256_bytes(_semantic_event_bytes(selected_events))
 
     snapshots_path = output / "source_snapshots.json"
     materialized_snapshots = tuple(source_snapshots)
     _write_source_snapshots(snapshots_path, materialized_snapshots)
+    source_semantic_hash = _sha256_bytes(
+        _semantic_source_snapshot_bytes(materialized_snapshots)
+    )
 
     input_files = [
         _copy_input(Path(units_csv), evidence_dir, role="unit_versions"),
@@ -225,31 +281,21 @@ def create_laa_real_dataset_snapshot(
         snapshot_version=snapshot_version,
         window_from=window_from,
         window_to=window_to,
-        event_semantic_sha256=semantic_hash,
-        source_snapshots_sha256=_file_fingerprint(
-            snapshots_path,
-            role="source_snapshots",
-        ).sha256,
+        event_semantic_sha256=event_semantic_hash,
+        source_snapshot_semantic_sha256=source_semantic_hash,
         input_files=frozen_inputs,
     )
-    identity_bytes = json.dumps(
-        identity,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    dataset_snapshot_id = f"sha256:{_sha256_bytes(identity_bytes)}"
-
     audit = audit_laa_events(selected_events)
     manifest = LAARealDatasetSnapshotManifest(
         snapshot_version=snapshot_version,
-        dataset_snapshot_id=dataset_snapshot_id,
+        dataset_snapshot_id=_dataset_snapshot_id(identity),
         window_from=window_from,
         window_to=window_to,
         event_count=len(selected_events),
-        event_semantic_sha256=semantic_hash,
+        event_semantic_sha256=event_semantic_hash,
         events_file=_file_fingerprint(events_path, role="canonical_events"),
         source_snapshot_count=len(materialized_snapshots),
+        source_snapshot_semantic_sha256=source_semantic_hash,
         source_snapshots_file=_file_fingerprint(
             snapshots_path,
             role="source_snapshots",
@@ -262,8 +308,7 @@ def create_laa_real_dataset_snapshot(
         blockers=audit.blockers,
         warnings=audit.warnings,
     )
-    manifest_path = output / "manifest.json"
-    manifest_path.write_text(
+    (output / "manifest.json").write_text(
         json.dumps(
             manifest.model_dump(mode="json"),
             ensure_ascii=False,
@@ -301,4 +346,25 @@ def verify_laa_snapshot_directory(path: str | Path) -> LAARealDatasetSnapshotMan
         candidate = root / "evidence" / item.filename
         if _file_fingerprint(candidate, role=item.role).sha256 != item.sha256:
             raise ValueError(f"evidence file hash mismatch: {item.role}")
+
+    events = _load_full_events(events_path)
+    event_semantic_hash = _sha256_bytes(_semantic_event_bytes(events))
+    if event_semantic_hash != manifest.event_semantic_sha256:
+        raise ValueError("semantic event hash does not match snapshot manifest")
+    source_snapshots = _load_source_snapshots(snapshots_path)
+    source_semantic_hash = _sha256_bytes(_semantic_source_snapshot_bytes(source_snapshots))
+    if source_semantic_hash != manifest.source_snapshot_semantic_sha256:
+        raise ValueError("semantic source snapshot hash does not match snapshot manifest")
+
+    identity = _manifest_identity_payload(
+        project_code=manifest.project_code,
+        snapshot_version=manifest.snapshot_version,
+        window_from=manifest.window_from,
+        window_to=manifest.window_to,
+        event_semantic_sha256=event_semantic_hash,
+        source_snapshot_semantic_sha256=source_semantic_hash,
+        input_files=manifest.input_files,
+    )
+    if _dataset_snapshot_id(identity) != manifest.dataset_snapshot_id:
+        raise ValueError("dataset snapshot identity does not match manifest contents")
     return manifest
