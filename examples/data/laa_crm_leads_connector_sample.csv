@@ -1,0 +1,3 @@
+lead_id,contact_id,created_at,lead_source,campaign_id,content_id,sales_owner_id,decision_stage
+L-001,CONTACT-001,2026-09-16T08:00:00+07:00,facebook,CAMP-01,CR-01,SALES-01,qualified
+L-002,CONTACT-002,2026-09-16T08:05:00+07:00,property_portal,CAMP-02,CR-02,SALES-02,contacted
