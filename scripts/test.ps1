@@ -22,7 +22,7 @@ if (-not (Test-Path $venvPython)) {
 function Invoke-Checked {
     param(
         [string]$Executable,
-        [string[]]$Arguments
+        [string[]]$Arguments = @()
     )
     Write-Host "> $Executable $($Arguments -join ' ')"
     & $Executable @Arguments
@@ -33,12 +33,18 @@ function Invoke-Checked {
 
 function Test-Quick {
     Write-Host "=== QUICK ==="
-    Invoke-Checked $venvPython @(
+    Invoke-Checked -Executable $venvPython -Arguments @(
         "-c",
         "import synapse_realworld; print('version=' + synapse_realworld.__version__)"
     )
-    Invoke-Checked $venvCli @("--help")
-    Invoke-Checked $venvCli @("demo", "--population", "50", "--seed", "42")
+    Invoke-Checked -Executable $venvCli -Arguments @("--help")
+    Invoke-Checked -Executable $venvCli -Arguments @(
+        "demo",
+        "--population",
+        "50",
+        "--seed",
+        "42"
+    )
 }
 
 function Test-Unit {
@@ -49,13 +55,13 @@ function Test-Unit {
     if (-not (Test-Path $venvPytest)) {
         throw "pytest not found. Re-run setup.ps1."
     }
-    Invoke-Checked $venvRuff @("check", ".")
-    Invoke-Checked $venvPytest @()
+    Invoke-Checked -Executable $venvRuff -Arguments @("check", ".")
+    Invoke-Checked -Executable $venvPytest
 }
 
 function Test-Milestones {
     Write-Host "=== LAA MILESTONES v0.8 ==="
-    Invoke-Checked $venvPytest @(
+    Invoke-Checked -Executable $venvPytest -Arguments @(
         "-q",
         "tests/test_laa_milestones.py",
         "tests/test_laa_milestone_guards.py"
@@ -83,7 +89,10 @@ function Test-Milestones {
 
 function Test-Productionization {
     Write-Host "=== LAA PRODUCTIONIZATION ==="
-    Invoke-Checked $venvPytest @("-q", "tests/test_productionization.py")
+    Invoke-Checked -Executable $venvPytest -Arguments @(
+        "-q",
+        "tests/test_productionization.py"
+    )
 
     $connectors = & $venvCli laa-connectors | Out-String
     if ($LASTEXITCODE -ne 0) {
