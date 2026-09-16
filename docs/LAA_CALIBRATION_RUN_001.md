@@ -1,160 +1,191 @@
 # LAA Calibration Run #001
 
+## Status
+
+**Workflow implemented in Synapse Real-World Platform v0.8.**
+
+The real production Run #001 has **not** been declared complete merely because the code path exists. It can run only from a verified, training-ready **LAA Real Dataset Snapshot #001** built from real production evidence.
+
+CI uses synthetic fixtures solely to verify the contract.
+
 ## Purpose
 
-Calibration Run #001 is the first scientific checkpoint where Synapse is trained and evaluated against real Lan Anh Avenue evidence rather than synthetic fixtures.
+Calibration Run #001 is the first scientific checkpoint where the buyer-choice model is trained and temporally validated against a frozen Lan Anh Avenue evidence snapshot.
 
-This document is a runbook scaffold only. It must not be executed with fabricated production data.
+It must answer:
 
-## Required inputs
+1. Can the model reconstruct buyer choice from time-correct inventory/offers and observed buyer evidence?
+2. Does it outperform the agreed naive baseline on future holdout decisions?
+3. Are price, payment, commute and product responses economically defensible?
+4. Is uncertainty sufficiently disclosed for bounded decision support?
 
-A frozen evidence window containing, where available:
+## Hard input boundary
 
-- structured household qualification events;
-- time-versioned inventory snapshots;
-- time-versioned offers/payment plans;
-- workplace-zone / commute evidence;
-- product shortlist evidence;
-- verified site tours;
-- verified booking/contract/cancel/lost/postpone outcomes;
-- reasons and outside options;
-- source snapshots and provenance.
+Run #001 reads only from the verified Snapshot #001 directory:
 
-## Pre-run gate
+- `events.jsonl`;
+- frozen unit versions;
+- frozen offers/payment terms;
+- frozen travel-time evidence when available;
+- the snapshot manifest and dataset ID.
 
-Run:
+It does not read a newer live inventory/price export after the snapshot has been frozen.
 
-```bash
-synapse-realworld data-audit --db synapse.duckdb --output data_audit.json
-```
+## Fail-closed gates
 
-Calibration Run #001 must not be promoted to a business decision model if:
+The command refuses to proceed when:
 
-- `training_ready=false`;
-- temporal inventory or offer evidence is missing;
-- verified outcome labels are unavailable;
-- future-leakage checks fail;
-- outside-option evidence is absent for most lost/postponed records;
-- dataset provenance cannot be reconstructed.
+- snapshot hash verification fails;
+- snapshot `training_ready=false`;
+- frozen unit or offer evidence is missing;
+- code commit SHA is absent;
+- calibration produces fewer historical choices than the governed minimum;
+- the run output directory is already populated.
 
-## Snapshot naming
+The default governed minimum is currently 30 historical choices. This is only a minimum execution gate, not a claim that 30 decisions are statistically sufficient for all business conclusions.
 
-Recommended immutable dataset label:
-
-```text
-LAA_REAL_<START_YYYYMMDD>_<END_YYYYMMDD>_<CONTENT_HASH>
-```
-
-Record:
-
-- extraction timestamp;
-- included source IDs;
-- source snapshot hashes;
-- code commit SHA;
-- schema/profile versions;
-- excluded records and reasons.
-
-## Temporal split
-
-Do not randomly split the historical events.
-
-Preferred first run:
-
-```text
-TRAIN  = earliest ~80% of the decision timeline
-HOLDOUT = latest ~20%
-```
-
-If a clean monthly boundary exists, prefer an explicit calendar split.
-
-Example only:
-
-```text
-Train:   2026-06-01 -> 2026-08-31
-Holdout: 2026-09-01 -> 2026-09-30
-```
-
-The actual dates must be chosen from the available production evidence.
-
-## Calibration command
-
-After source verification and audit:
+## Run command
 
 ```bash
-synapse-realworld calibrate \
-  --units-csv <verified-temporal-units.csv> \
-  --offers-csv <verified-temporal-offers.csv> \
-  --travel-times-csv <verified-travel-times.csv> \
-  --project-anchor-id LAA \
-  --db synapse.duckdb \
-  --registry-dir model_registry \
-  --model-name laa-buyer-choice \
-  --model-version real-run-001 \
+synapse-realworld laa-calibration-001-run \
+  --snapshot-dir artifacts/laa_real_dataset_snapshot_001 \
+  --model-registry-dir model_registry \
+  --output-dir artifacts/laa_calibration_run_001 \
   --code-commit-sha <git-sha> \
   --holdout-fraction 0.2 \
   --bootstrap-samples 100 \
-  --output calibration_run_001.json
+  --minimum-profile-confidence 0.3 \
+  --diagnostic-population-size 5000 \
+  --minimum-historical-choices 30 \
+  --seed 42
 ```
 
-Training registers a `candidate`, never an approved model.
-
-## Evaluation checklist
-
-Review at minimum:
-
-- temporal holdout log loss;
-- calibration / probability reliability;
-- comparison with uniform/simple baselines;
-- coefficient directions and plausible magnitudes;
-- segment stability;
-- choice ranking / selected alternative behavior;
-- price sensitivity;
-- payment-plan sensitivity;
-- commute sensitivity;
-- outside-option migration;
-- bootstrap uncertainty;
-- data-quality warnings.
-
-## Decision gate
-
-A human data reviewer may move the artifact to `validated` only after verifying:
-
-1. dataset audit and provenance;
-2. no material future leakage;
-3. holdout performance is better than the agreed naive baseline;
-4. model behavior remains economically defensible;
-5. sparse segments and uncertainty are clearly disclosed.
-
-A separate business owner may move a validated artifact to `approved` for a bounded decision-support use case.
-
-Approval is not proof of market truth and does not authorize autonomous pricing, financing, legal, or individual-customer actions.
-
-## First prospective test
-
-After an approved Run #001 model exists, prefer a lower-risk information-framing experiment before testing sensitive price changes.
-
-Recommended first candidate:
+The output directory is immutable and contains:
 
 ```text
-Commute Perception Experiment
+laa_calibration_run_001/
+  population_profile.json
+  calibration.json
+  run_manifest.json
 ```
 
-Control: standard location message.
+## Population artifact
 
-Treatment: measured travel-time framing for eligible workplace segments.
+The empirical population profile is fitted from structured qualification evidence contained in Snapshot #001.
 
-The model prediction must be prospectively locked before assignment/exposure evidence arrives.
+The profile:
 
-## Deliverables
+- strips historical household analytics IDs;
+- preserves observed joint feature combinations through empirical prototypes;
+- carries `dataset_snapshot_id`;
+- carries deterministic population content hash/version;
+- reports population diagnostics and small-sample warnings.
 
-Calibration Run #001 should produce:
+It represents the **observed evidence base**, not automatically the entire LAA addressable market. Acquisition/channel bias must be assessed before calling it a market-population model.
 
-- immutable data-audit JSON;
-- dataset/source manifest;
-- candidate model artifact;
-- holdout diagnostics;
-- bootstrap parameter vectors;
-- population profile diagnostics;
-- reviewer decision record;
-- approved/rejected status with reason;
-- proposed first prospective experiment if approved.
+## Temporal validation
+
+Run #001 uses chronological train/holdout splitting rather than random row splitting.
+
+Default:
+
+```text
+TRAIN   = earliest ~80% of decision timeline
+HOLDOUT = latest ~20%
+```
+
+If a clean production calendar boundary is preferable, the evidence window and calibration policy should be versioned accordingly rather than silently changing the split after results are seen.
+
+## Model artifact
+
+Calibration creates and registers an immutable model artifact containing:
+
+- dataset snapshot ID;
+- code commit SHA;
+- feature schema version;
+- learned parameters;
+- train metrics;
+- holdout metrics;
+- bootstrap coefficient intervals;
+- retained bootstrap parameter vectors;
+- diagnostics and provenance.
+
+Training always registers the model as:
+
+```text
+candidate
+```
+
+It is never auto-approved.
+
+## Human governance
+
+A data reviewer may append:
+
+```bash
+synapse-realworld model-decide <ARTIFACT_ID> \
+  --status validated \
+  --decided-by <reviewer> \
+  --reason "<documented review>" \
+  --registry-dir model_registry
+```
+
+A separate authorized business owner may then append:
+
+```bash
+synapse-realworld model-decide <ARTIFACT_ID> \
+  --status approved \
+  --decided-by <business-owner> \
+  --reason "Approved for bounded LAA decision support" \
+  --registry-dir model_registry
+```
+
+The lifecycle remains:
+
+```text
+candidate -> validated -> approved/rejected -> archived
+```
+
+## Review checklist
+
+Before validation/approval, inspect at minimum:
+
+- data audit and provenance;
+- future-leakage safeguards;
+- holdout log loss;
+- top-1/choice ranking behavior;
+- baseline comparison;
+- probability calibration where sample allows;
+- coefficient direction and magnitude;
+- price sensitivity;
+- payment/cash-flow sensitivity;
+- commute sensitivity;
+- product substitution;
+- outside-option migration;
+- segment stability;
+- bootstrap uncertainty;
+- sparse-segment and acquisition-bias warnings.
+
+Approval is a governance state for a bounded use case, not proof that the model is market truth.
+
+## Relation to Prospective Experiment #001
+
+An approved Calibration Run #001 artifact is a hard prerequisite for locking **LAA Prospective Experiment #001**.
+
+The experiment workflow verifies that:
+
+- the calibration run references Snapshot #001;
+- the registered approved model references the same dataset snapshot;
+- the fitted population profile references the same dataset snapshot;
+- the forecast is locked before assignments or outcomes arrive.
+
+## Important boundary
+
+The v0.8 workflow being green in CI proves implementation correctness against synthetic contract fixtures. It does not mean real LAA Calibration Run #001 has occurred.
+
+The production milestone is complete only when real redacted/approved evidence has produced:
+
+1. a verified training-ready Snapshot #001;
+2. an immutable Calibration Run #001 artifact;
+3. documented holdout review;
+4. explicit validated/approved or rejected governance decisions.
