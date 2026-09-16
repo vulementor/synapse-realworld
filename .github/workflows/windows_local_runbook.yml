@@ -1,0 +1,20 @@
+name: Windows Local Runbook
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-runbook:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Setup through documented PowerShell helper
+        shell: powershell
+        run: .\scripts\setup.ps1
+      - name: Full local test through documented PowerShell helper
+        shell: powershell
+        run: .\scripts\test.ps1 -Mode full

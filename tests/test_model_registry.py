@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 import pytest
 
@@ -74,3 +75,35 @@ def test_model_registry_enforces_governance_transitions(tmp_path) -> None:
         )
     )
     assert registry.get(artifact.artifact_id).status == ModelStatus.ARCHIVED
+
+
+def test_registry_uses_append_order_when_decision_timestamps_match(tmp_path) -> None:
+    registry = FileModelRegistry(tmp_path / "registry")
+    artifact = _artifact()
+    registry.register(artifact)
+    same_time = datetime(2026, 9, 16, 5, 35, tzinfo=timezone.utc)
+
+    registry.decide(
+        ModelDecision(
+            decision_id=UUID("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            artifact_id=artifact.artifact_id,
+            status=ModelStatus.VALIDATED,
+            decided_at=same_time,
+            decided_by="data-lead",
+            reason="validated first",
+        )
+    )
+    registry.decide(
+        ModelDecision(
+            decision_id=UUID("00000000-0000-0000-0000-000000000001"),
+            artifact_id=artifact.artifact_id,
+            status=ModelStatus.APPROVED,
+            decided_at=same_time,
+            decided_by="business-owner",
+            reason="approved second",
+        )
+    )
+
+    registered = registry.get(artifact.artifact_id)
+    assert registered.status == ModelStatus.APPROVED
+    assert registered.latest_decision.status == ModelStatus.APPROVED
