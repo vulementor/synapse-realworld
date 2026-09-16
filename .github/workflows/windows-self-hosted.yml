@@ -1,0 +1,72 @@
+name: windows-self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: Synapse local test mode
+        required: true
+        default: full
+        type: choice
+        options:
+          - quick
+          - unit
+          - milestones
+          - productionization
+          - full
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: synapse-realworld-windows
+  cancel-in-progress: false
+
+jobs:
+  local-validation:
+    runs-on: [self-hosted, Windows, X64, github_reel_review]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 0
+
+      - name: Show checkout identity
+        shell: powershell
+        run: |
+          Write-Host "Runner: $env:RUNNER_NAME"
+          Write-Host "Workspace: $env:GITHUB_WORKSPACE"
+          git rev-parse HEAD
+          git status --short
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Synapse through repository helper
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+
+      - name: Run requested local test mode
+        shell: powershell
+        run: |
+          $mode = "${{ github.event.inputs.test_mode }}"
+          if ([string]::IsNullOrWhiteSpace($mode)) {
+            $mode = "full"
+          }
+          Write-Host "Running Synapse test mode: $mode"
+          .\scripts\test.ps1 -Mode $mode
+
+      - name: Show installed source identity
+        if: always()
+        shell: powershell
+        run: |
+          if (Test-Path ".\.venv\Scripts\python.exe") {
+            .\.venv\Scripts\python.exe -c "import synapse_realworld; print('version=' + synapse_realworld.__version__); print('module=' + synapse_realworld.__file__)"
+          }
+          git rev-parse --short HEAD
