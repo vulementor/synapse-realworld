@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -175,7 +174,9 @@ def audit_laa_events(events: Iterable[CanonicalEvent]) -> LAADataAudit:
             name="commute",
             status=_status(commute_evidence),
             evidence_count=commute_evidence,
-            notes=("Workplace-zone coverage is the minimum; routing evidence is still recommended.",),
+            notes=(
+                "Workplace-zone coverage is the minimum; routing evidence is still recommended.",
+            ),
         ),
         "product": ReadinessCheck(
             name="product",
