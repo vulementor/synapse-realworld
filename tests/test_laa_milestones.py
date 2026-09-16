@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -31,29 +32,149 @@ from synapse_realworld.registry import (
 BASE = datetime(2026, 9, 5, 8, 0, tzinfo=timezone.utc)
 
 
-UNITS = """unit_id,project_id,unit_code,product_type,inventory_state,lot_area_m2,built_area_m2,effective_from,effective_to,source_id
-22222222-2222-2222-2222-222222222222,11111111-1111-1111-1111-111111111111,LK4-42,townhouse,available,80,180,2026-09-01T00:00:00+00:00,,inventory:test
-33333333-3333-3333-3333-333333333333,11111111-1111-1111-1111-111111111111,LK5-04,townhouse,available,90,200,2026-09-01T00:00:00+00:00,,inventory:test
-"""
-
-OFFERS = """unit_id,product_type,list_price,net_price,discount_pct,incentive_cash,payment_plan_code,down_payment_pct,monthly_payment_est,effective_from,effective_to,source_id
-22222222-2222-2222-2222-222222222222,townhouse,2000000000,1950000000,0,0,PLAN-A,0.3,18000000,2026-09-01T00:00:00+00:00,,offer:test
-33333333-3333-3333-3333-333333333333,townhouse,2500000000,2450000000,0,0,PLAN-A,0.3,22000000,2026-09-01T00:00:00+00:00,,offer:test
-"""
-
-TRAVEL = """origin_anchor_id,destination_anchor_id,mode,departure_bucket,travel_time_min,distance_km,reliability_p90_min,observed_at,valid_from,valid_to,source_id
-VSIP III,LAA,motorbike,am_peak,28,18.4,36,2026-09-01T00:00:00+00:00,2026-09-01T00:00:00+00:00,,routing:test
-Nam Tan Uyen,LAA,motorbike,am_peak,34,22.1,43,2026-09-01T00:00:00+00:00,2026-09-01T00:00:00+00:00,,routing:test
-"""
+def _write_csv(path: Path, header: list[str], rows: list[list[object]]) -> None:
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
 
 
 def _write_inputs(root: Path) -> tuple[Path, Path, Path]:
     units = root / "units.csv"
     offers = root / "offers.csv"
     travel = root / "travel.csv"
-    units.write_text(UNITS, encoding="utf-8")
-    offers.write_text(OFFERS, encoding="utf-8")
-    travel.write_text(TRAVEL, encoding="utf-8")
+    _write_csv(
+        units,
+        [
+            "unit_id",
+            "project_id",
+            "unit_code",
+            "product_type",
+            "inventory_state",
+            "lot_area_m2",
+            "built_area_m2",
+            "effective_from",
+            "effective_to",
+            "source_id",
+        ],
+        [
+            [
+                "22222222-2222-2222-2222-222222222222",
+                "11111111-1111-1111-1111-111111111111",
+                "LK4-42",
+                "townhouse",
+                "available",
+                80,
+                180,
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "inventory:test",
+            ],
+            [
+                "33333333-3333-3333-3333-333333333333",
+                "11111111-1111-1111-1111-111111111111",
+                "LK5-04",
+                "townhouse",
+                "available",
+                90,
+                200,
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "inventory:test",
+            ],
+        ],
+    )
+    _write_csv(
+        offers,
+        [
+            "unit_id",
+            "product_type",
+            "list_price",
+            "net_price",
+            "discount_pct",
+            "incentive_cash",
+            "payment_plan_code",
+            "down_payment_pct",
+            "monthly_payment_est",
+            "effective_from",
+            "effective_to",
+            "source_id",
+        ],
+        [
+            [
+                "22222222-2222-2222-2222-222222222222",
+                "townhouse",
+                2_000_000_000,
+                1_950_000_000,
+                0,
+                0,
+                "PLAN-A",
+                0.3,
+                18_000_000,
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "offer:test",
+            ],
+            [
+                "33333333-3333-3333-3333-333333333333",
+                "townhouse",
+                2_500_000_000,
+                2_450_000_000,
+                0,
+                0,
+                "PLAN-A",
+                0.3,
+                22_000_000,
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "offer:test",
+            ],
+        ],
+    )
+    _write_csv(
+        travel,
+        [
+            "origin_anchor_id",
+            "destination_anchor_id",
+            "mode",
+            "departure_bucket",
+            "travel_time_min",
+            "distance_km",
+            "reliability_p90_min",
+            "observed_at",
+            "valid_from",
+            "valid_to",
+            "source_id",
+        ],
+        [
+            [
+                "VSIP III",
+                "LAA",
+                "motorbike",
+                "am_peak",
+                28,
+                18.4,
+                36,
+                "2026-09-01T00:00:00+00:00",
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "routing:test",
+            ],
+            [
+                "Nam Tan Uyen",
+                "LAA",
+                "motorbike",
+                "am_peak",
+                34,
+                22.1,
+                43,
+                "2026-09-01T00:00:00+00:00",
+                "2026-09-01T00:00:00+00:00",
+                "",
+                "routing:test",
+            ],
+        ],
+    )
     return units, offers, travel
 
 
@@ -102,7 +223,9 @@ def _outcome(entity_id: str, index: int) -> CanonicalEvent:
 
 
 def _training_events(units_path: Path, offers_path: Path) -> tuple[CanonicalEvent, ...]:
-    unit_events = tuple(unit_version_to_event(item) for item in load_unit_versions_csv(units_path))
+    unit_events = tuple(
+        unit_version_to_event(item) for item in load_unit_versions_csv(units_path)
+    )
     offer_events = tuple(offer_to_event(item) for item in load_offers_csv(offers_path))
     households = []
     for index in range(40):
@@ -178,7 +301,10 @@ def test_snapshot_semantic_identity_ignores_ingest_ids(tmp_path: Path) -> None:
     assert verify_laa_snapshot_directory(tmp_path / "snapshot-a") == manifest_a
 
     events_path = tmp_path / "snapshot-a" / "events.jsonl"
-    events_path.write_text(events_path.read_text(encoding="utf-8") + "{}\n", encoding="utf-8")
+    events_path.write_text(
+        events_path.read_text(encoding="utf-8") + "{}\n",
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="events file hash"):
         verify_laa_snapshot_directory(tmp_path / "snapshot-a")
 
