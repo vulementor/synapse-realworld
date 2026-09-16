@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from synapse_realworld.connectors.base import ConnectorBatch
 from synapse_realworld.domain.events import CanonicalEvent
