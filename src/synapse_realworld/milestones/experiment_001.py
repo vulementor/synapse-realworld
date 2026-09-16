@@ -12,7 +12,10 @@ from synapse_realworld.adapters import (
     load_travel_times_csv,
     load_unit_versions_csv,
 )
-from synapse_realworld.datasets import verify_laa_snapshot_directory
+from synapse_realworld.datasets import (
+    LAARealDatasetSnapshotManifest,
+    verify_laa_snapshot_directory,
+)
 from synapse_realworld.experiments import (
     AssignmentMethod,
     ExperimentDefinition,
@@ -60,8 +63,12 @@ def _load_population_profile(path: Path) -> tuple[EmpiricalPopulationProfile, st
     return EmpiricalPopulationProfile.model_validate(payload), snapshot_id
 
 
-def _snapshot_input(root: Path, manifest: object, role: str) -> Path | None:
-    for item in manifest.input_files:  # type: ignore[attr-defined]
+def _snapshot_input(
+    root: Path,
+    manifest: LAARealDatasetSnapshotManifest,
+    role: str,
+) -> Path | None:
+    for item in manifest.input_files:
         if item.role == role:
             return root / "evidence" / item.filename
     return None
