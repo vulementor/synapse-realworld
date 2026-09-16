@@ -7,7 +7,11 @@ from typing import Annotated
 import typer
 
 from synapse_realworld.audit import audit_laa_events
-from synapse_realworld.connectors import GenericCsvConnector, LAA_CONNECTOR_PROFILES, get_laa_profile
+from synapse_realworld.connectors import (
+    GenericCsvConnector,
+    LAA_CONNECTOR_PROFILES,
+    get_laa_profile,
+)
 from synapse_realworld.ingestion import EventIngestor
 from synapse_realworld.persistence import DuckDBStore
 
