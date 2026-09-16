@@ -1,25 +1,72 @@
 # Synapse Real-World Platform — Windows self-hosted runner
 
-Tài liệu này mô tả cách dùng `.github/workflows/windows-self-hosted.yml` để GitHub Actions checkout **đúng commit mới trên GitHub xuống máy Windows local** và chạy test Synapse trên chính máy đó.
+Tài liệu này mô tả cách dùng `.github/workflows/windows-self-hosted.yml` để GitHub Actions đồng bộ code mới xuống đúng máy Windows local của anh và chạy test Synapse trên chính máy đó.
 
-Workflow được thiết kế theo convention đang dùng ở `gpt_fullproxy` và `github_review_reel`:
+Workflow dùng convention giống `gpt_fullproxy` và `github_review_reel`:
 
 ```text
 runs-on: [self-hosted, Windows, X64, github_reel_review]
 ```
 
-## 1. Khi nào workflow chạy
+## 1. Canonical local repo của Synapse
 
-Workflow hỗ trợ hai cách chạy:
+Đường dẫn làm việc local chính thức:
 
-1. **Tự động khi `main` có commit mới** — ví dụ sau khi merge PR.
-2. **Chạy thủ công bằng `workflow_dispatch`** — trong GitHub Actions có thể chọn branch/ref và chọn test mode.
+```text
+C:\Users\vulem\OneDrive\Documents\ChatGPT\Kabin Toolkit Test\synapse-realworld
+```
 
-Không bật `pull_request` cho self-hosted runner của repo public. Mục đích là tránh code từ PR không tin cậy được thực thi trực tiếp trên máy local của anh.
+Workflow lưu đường dẫn này trong biến:
 
-## 2. Runner cần có label nào
+```text
+SYNAPSE_LOCAL_REPO
+```
 
-Runner Synapse phải match đủ:
+Khi có push/merge mới vào `main`, self-hosted runner sẽ đồng bộ **chính repo ở đường dẫn này** rồi chạy setup/test ngay tại đây.
+
+## 2. Quy tắc an toàn khi đồng bộ local repo
+
+Workflow không dùng `git reset --hard` và không tự xóa code local.
+
+Trước khi cập nhật, nó chạy:
+
+```text
+git status --porcelain
+```
+
+Nếu repo local có file modified/untracked chưa xử lý, workflow **dừng ngay** và báo lỗi. Anh cần commit, stash hoặc xóa các file đó trước khi chạy lại.
+
+Nếu repo sạch:
+
+```text
+git fetch origin main --prune
+→ git switch main
+→ git merge --ff-only origin/main
+→ xác nhận local HEAD == github.sha
+```
+
+Nếu thư mục canonical chưa tồn tại, workflow sẽ clone repo vào đúng đường dẫn trên.
+
+Nếu đường dẫn đã tồn tại nhưng không phải Git repo và có dữ liệu bên trong, workflow dừng để tránh ghi đè nhầm folder.
+
+## 3. Khi nào workflow chạy
+
+Workflow có hai chế độ:
+
+1. **Push/merge vào `main`**
+   - tự động đồng bộ canonical local repo;
+   - chạy setup/test trong đúng folder `Kabin Toolkit Test\synapse-realworld`.
+
+2. **Manual `workflow_dispatch`**
+   - cho phép chọn branch/ref và test mode;
+   - chỉ test branch đó trong workspace của runner;
+   - **không thay đổi canonical local working repo**.
+
+Không bật `pull_request` cho self-hosted runner của repo public để tránh code PR không tin cậy chạy trực tiếp trên máy anh.
+
+## 4. Runner cần label nào
+
+Runner phải match:
 
 ```text
 self-hosted
@@ -28,11 +75,11 @@ X64
 github_reel_review
 ```
 
-Ba label đầu là default labels của Windows x64 runner. `github_reel_review` là custom label đang dùng chung convention với các repo liên quan.
+Ba label đầu là default label của Windows x64 runner. `github_reel_review` là custom label đang dùng chung convention với các repo toolkit khác.
 
-## 3. Đăng ký runner cho repo Synapse
+## 5. Đăng ký runner cho repo Synapse
 
-Nếu runner hiện tại của `github_review_reel` / `gpt_fullproxy` là **repository-level runner**, Synapse cần một runner registration riêng cho repo `vulementor/synapse-realworld` dù có thể chạy trên cùng máy Windows.
+Nếu runner hiện tại của `github_review_reel` / `gpt_fullproxy` là repository-level runner, Synapse cần registration riêng cho `vulementor/synapse-realworld`, dù vẫn có thể chạy trên cùng máy Windows.
 
 Trong GitHub:
 
@@ -46,73 +93,79 @@ synapse-realworld
 → x64
 ```
 
-GitHub sẽ sinh ra lệnh download/config có token ngắn hạn. Chạy đúng lệnh GitHub hiển thị.
+GitHub sẽ sinh lệnh download/config có token ngắn hạn. Chạy đúng lệnh GitHub hiển thị.
 
-Khuyến nghị dùng thư mục riêng, ví dụ:
+Khuyến nghị folder runner riêng:
 
 ```text
 C:\actions-runner-synapse-realworld
 ```
 
-Khi config runner, thêm custom label:
+Custom label:
 
 ```text
 github_reel_review
 ```
 
-Tên runner có thể là:
+Tên runner gợi ý:
 
 ```text
 synapse-realworld-windows
 ```
 
-Không commit registration token, credentials hoặc file cấu hình runner vào repo.
+Không commit registration token, credentials hoặc config runner vào repo.
 
-## 4. Chạy interactive hoặc service
+## 6. Quyền truy cập OneDrive rất quan trọng
 
-Để test nhanh, mở PowerShell trong folder runner và chạy:
+Canonical repo nằm dưới profile:
+
+```text
+C:\Users\vulem\OneDrive\...
+```
+
+Vì vậy process chạy GitHub Runner phải có quyền đọc/ghi vào profile `vulem` và folder OneDrive này.
+
+Cách đơn giản nhất khi test ban đầu là chạy runner interactive từ session Windows của anh:
 
 ```powershell
+cd C:\actions-runner-synapse-realworld
 .\run.cmd
 ```
 
-Nếu muốn runner luôn online sau khi reboot, cài nó thành Windows service theo lệnh `svc` do GitHub runner package cung cấp.
+Nếu cài runner thành Windows service, kiểm tra service đang chạy bằng account có quyền truy cập folder `C:\Users\vulem\OneDrive\...`. Nếu service chạy bằng account hệ thống không thấy OneDrive/profile của anh, bước sync canonical repo sẽ fail.
 
-Runner phải hiện trạng thái **Idle** trong:
-
-```text
-Settings → Actions → Runners
-```
-
-thì workflow mới nhận job.
-
-## 5. Workflow làm gì trên máy local
-
-Khi nhận job, workflow sẽ:
+## 7. Workflow làm gì khi `main` có code mới
 
 ```text
-GitHub commit
+GitHub main commit
    ↓
-actions/checkout@v4
-clean=true
-fetch-depth=0
+self-hosted runner nhận job
    ↓
-Setup Python 3.11
+actions/checkout vào runner workspace để xác định exact SHA
    ↓
-.\scripts\setup.ps1
+kiểm canonical local repo sạch
    ↓
-.\scripts\test.ps1 -Mode <mode>
+fetch + fast-forward main
    ↓
-In version + module path + git SHA
+assert local HEAD == github.sha
+   ↓
+SYNAPSE_TEST_ROOT =
+C:\Users\vulem\OneDrive\Documents\ChatGPT\Kabin Toolkit Test\synapse-realworld
+   ↓
+setup Python 3.11
+   ↓
+scripts/setup.ps1
+   ↓
+scripts/test.ps1 -Mode full
+   ↓
+in version + module path + git SHA
 ```
 
-`actions/checkout` chạy trong workspace riêng của self-hosted runner. Nó checkout đúng `${{ github.sha }}` của run, vì vậy local test gắn trực tiếp với commit trên GitHub.
+Như vậy khi job xanh, folder mà anh mở trong VS Code/Codex/terminal cũng chính là code vừa được GitHub cập nhật và test.
 
-`clean: true` giúp tránh file build/venv cũ làm sai kết quả. `.venv` sẽ được tạo lại bởi `scripts/setup.ps1` khi cần.
+## 8. Test modes
 
-## 6. Test modes
-
-Khi chạy thủ công, có thể chọn:
+Manual dispatch hỗ trợ:
 
 ```text
 quick
@@ -122,23 +175,15 @@ productionization
 full
 ```
 
-Mặc định:
-
-```text
-full
-```
-
-Ý nghĩa giống `scripts/test.ps1`:
+Mặc định là `full`.
 
 - `quick`: import + CLI + demo nhỏ;
 - `unit`: Ruff + full pytest;
 - `milestones`: Snapshot #001 / Calibration #001 / Experiment #001 contract tests;
 - `productionization`: connector + readiness tests;
-- `full`: chạy tất cả nhóm trên.
+- `full`: chạy toàn bộ.
 
-## 7. Chạy thủ công từ GitHub UI
-
-Vào:
+## 9. Chạy thủ công từ GitHub UI
 
 ```text
 GitHub repo
@@ -147,61 +192,64 @@ GitHub repo
 → Run workflow
 ```
 
-Chọn branch/ref cần test và `test_mode`, sau đó bấm **Run workflow**.
+Chọn branch/ref và `test_mode`.
 
-Đây là cách nên dùng nếu anh muốn test một feature branch trước khi merge mà không bật self-hosted runner cho mọi `pull_request`.
+Manual dispatch dùng runner workspace và không đổi canonical local repo, nên phù hợp để test feature branch trước khi merge.
 
-## 8. Tự động test code mới trên `main`
+## 10. Tự động lấy code mới về local
 
-Sau mỗi merge/push vào `main`, workflow tự queue.
-
-Nếu runner đang online:
+Sau mỗi merge/push `main`:
 
 ```text
 main push
-→ self-hosted runner nhận job
-→ checkout commit mới
-→ setup
+→ windows-self-hosted
+→ canonical local repo fast-forward
 → full test
 ```
 
-Nếu runner offline, GitHub giữ job ở trạng thái queued cho đến khi runner phù hợp online hoặc run bị hủy/hết hạn.
+Nếu runner offline, GitHub giữ job queued cho đến khi runner phù hợp online hoặc run bị hủy/hết hạn.
 
-## 9. Kiểm tra source identity
+Nếu canonical repo đang có local changes, job fail-safe thay vì ghi đè.
 
-Cuối workflow có bước in:
+## 11. Kiểm tra source identity
+
+Cuối workflow sẽ in:
 
 ```text
+validated root
 package version
 module path
 git short SHA
 ```
 
-Dùng ba giá trị này để xác nhận máy local đang test đúng code GitHub vừa tạo, tránh nhầm với package/checkout cũ.
+Expected validated root trên `main` push:
 
-## 10. Security boundary
+```text
+C:\Users\vulem\OneDrive\Documents\ChatGPT\Kabin Toolkit Test\synapse-realworld
+```
 
-Self-hosted runner có quyền chạy lệnh trên máy của anh. Vì vậy:
+## 12. Security boundary
 
-- không chạy workflow self-hosted trên PR không tin cậy;
-- không lưu secrets trong workspace repo;
-- dùng account/service có quyền tối thiểu cần thiết;
+Self-hosted runner có quyền chạy lệnh trên máy anh. Vì vậy:
+
+- không chạy self-hosted workflow trên PR không tin cậy;
+- chỉ auto-trigger branch `main`;
+- branch khác test bằng manual dispatch;
+- không lưu secrets trong repo/worktree;
+- dùng account/service có quyền tối thiểu;
 - giữ runner package cập nhật;
-- không đặt token registration trong file YAML;
-- nếu máy chứa profile/browser/session quan trọng, chỉ cho trusted branches/manual dispatch chạy self-hosted job.
+- workflow không tự reset/xóa local changes.
 
-## 11. Quan hệ với Windows hosted CI
+## 13. Quan hệ với Windows hosted CI
 
-Repo vẫn giữ `.github/workflows/windows_local_runbook.yml` chạy trên `windows-latest` của GitHub.
-
-Hai workflow phục vụ hai mục đích khác nhau:
+Repo vẫn có `.github/workflows/windows_local_runbook.yml` chạy trên máy Windows sạch của GitHub.
 
 ```text
 Windows Local Runbook
-= kiểm tra setup/test scripts trên Windows sạch do GitHub host
+= chứng minh setup/test scripts chạy trên Windows sạch
 
 windows-self-hosted
-= lấy đúng code GitHub xuống máy Windows thật của anh và chạy cùng test contract
+= đồng bộ code GitHub về canonical repo trên máy anh và chạy cùng test contract
 ```
 
 Nên giữ cả hai.
