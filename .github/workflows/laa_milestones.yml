@@ -1,0 +1,29 @@
+name: LAA Milestones
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  milestone-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Snapshot, calibration and experiment contracts
+        run: |
+          pytest -q \
+            tests/test_laa_milestones.py \
+            tests/test_laa_milestone_guards.py
+      - name: Milestone CLI surface
+        run: |
+          synapse-realworld --help > /tmp/synapse-help.txt
+          grep -q "laa-snapshot-001-create" /tmp/synapse-help.txt
+          grep -q "laa-snapshot-001-verify" /tmp/synapse-help.txt
+          grep -q "laa-calibration-001-run" /tmp/synapse-help.txt
+          grep -q "laa-experiment-001-create" /tmp/synapse-help.txt
+          grep -q "laa-experiment-001-lock" /tmp/synapse-help.txt
